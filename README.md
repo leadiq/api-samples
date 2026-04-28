@@ -25,7 +25,7 @@ You will need a **Secret Base64 API key** from LeadIQ under **Settings → API K
 
 ## Docker
 
-If you prefer not to install a language runtime locally, a Docker setup is available in [`docker/`](docker/DOCKER.md). Currently supports the Python samples.
+If you prefer not to install a language runtime locally, a Docker setup is available in [`_docker/`](_docker/DOCKER.md). Currently supports the Python samples.
 
 ---
 

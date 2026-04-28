@@ -3,7 +3,7 @@ services:
   leadiq-python:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.python
+      dockerfile: _docker/Dockerfile.python
     env_file:
       - ../python/.env
     volumes:
@@ -13,7 +13,7 @@ services:
   leadiq-ts:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.typescript
+      dockerfile: _docker/Dockerfile.typescript
     env_file:
       - ../typescript/.env
     volumes:
@@ -27,7 +27,7 @@ services:
   leadiq-bash:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.bash
+      dockerfile: _docker/Dockerfile.bash
     environment:
       # Pass LEADIQ_API_KEY from the host environment into the container.
       # Set it on the host before running: export LEADIQ_API_KEY=your_key

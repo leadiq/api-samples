@@ -38,7 +38,7 @@ export LEADIQ_API_KEY=ABCdef123...
 
 ## Build the images
 
-From the `docker/` directory:
+From the `_docker/` directory:
 
 ```bash
 docker compose build

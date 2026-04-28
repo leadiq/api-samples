@@ -17,7 +17,7 @@ build/
 node_modules/
 *.tsbuildinfo
 
-# Docker
+# Docker runtime data
 .docker/
 
 # macOS
