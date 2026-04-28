@@ -4,7 +4,7 @@
   "private": true,
   "description": "LeadIQ API samples written in TypeScript",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "01": "ts-node graphql/01_check_usage.ts",

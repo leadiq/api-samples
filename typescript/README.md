@@ -8,7 +8,7 @@ Ready-to-run TypeScript scripts that show you how to use the LeadIQ API. No prio
 
 - A **LeadIQ account** with API access enabled
 - Your **Secret Base64 API key** — find it in LeadIQ under **Settings → API Keys**
-- **Node.js 18 or later** installed on your computer — see instructions below
+- **Node.js 22 or later** installed on your computer — see instructions below
 
 ---
 
