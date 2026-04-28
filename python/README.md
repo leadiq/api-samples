@@ -1,6 +1,6 @@
 # LeadIQ API — Python Samples
 
-Ready-to-run Python scripts that show you how to use the LeadIQ API.
+Ready-to-run Python scripts that show you how to use the LeadIQ API. No prior programming experience needed — just follow the steps below.
 
 ---
 
@@ -8,7 +8,52 @@ Ready-to-run Python scripts that show you how to use the LeadIQ API.
 
 - A **LeadIQ account** with API access enabled
 - Your **Secret Base64 API key** — find it in LeadIQ under **Settings → API Keys**
-- Either **Docker Desktop** or **Python 3.10+** installed on your machine (see options below)
+- **Python 3.10 or later** installed on your computer — see instructions below
+
+---
+
+## Installing Python
+
+### Windows
+
+1. Go to [python.org/downloads](https://www.python.org/downloads/) and click **Download Python 3.x.x**
+2. Run the installer
+3. **Important:** on the first screen, check the box that says **"Add Python to PATH"** before clicking Install
+4. Once installed, open the **Command Prompt** (search for `cmd` in the Start menu) and verify it worked:
+   ```
+   python --version
+   ```
+   You should see something like `Python 3.12.0`.
+
+### Mac
+
+Mac comes with Python pre-installed, but it is often outdated. The easiest way to install a current version is through the official installer:
+
+1. Go to [python.org/downloads](https://www.python.org/downloads/) and click **Download Python 3.x.x**
+2. Open the downloaded `.pkg` file and follow the installer steps
+3. Once installed, open **Terminal** (search for it in Spotlight with `Cmd + Space`) and verify:
+   ```
+   python3 --version
+   ```
+   You should see something like `Python 3.12.0`.
+
+### Linux
+
+Most Linux distributions include Python. Check first:
+
+```bash
+python3 --version
+```
+
+If it is missing or below 3.10, install it via your package manager:
+
+```bash
+# Ubuntu / Debian
+sudo apt update && sudo apt install python3 python3-pip python3-venv
+
+# Fedora
+sudo dnf install python3
+```
 
 ---
 
@@ -21,13 +66,39 @@ git clone https://github.com/leadiq/api-samples.git
 cd api-samples/python
 ```
 
-**2. Create your environment file**
+**2. Create a virtual environment**
+
+This keeps the dependencies for these scripts separate from anything else on your machine.
+
+```bash
+python3 -m venv .venv
+```
+
+**3. Activate the virtual environment**
+
+On Mac / Linux:
+```bash
+source .venv/bin/activate
+```
+
+On Windows:
+```bash
+.venv\Scripts\activate
+```
+
+> You will need to activate the virtual environment each time you open a new terminal window before running scripts.
+
+**4. Install dependencies**
+
+```bash
+pip install -r requirements.txt
+```
+
+**5. Create your environment file**
 
 ```bash
 cp .env.example .env
 ```
-
-**3. Add your API key**
 
 Open the `.env` file in any text editor and replace the placeholder with your real key:
 
@@ -41,55 +112,11 @@ Save the file. You only need to do this once.
 
 ## Running the samples
 
-Choose the option that matches what you have installed.
-
-### Option A — Docker (no Python required)
-
-If you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed, you do not need Python on your machine. Docker handles everything.
-
-```bash
-docker compose run --rm leadiq python graphql/01_check_usage.py
-```
-
-The first run will take a minute to download and build the image. Subsequent runs are much faster.
-
----
-
-### Option B — Python directly
-
-If you have Python 3.10 or later installed, you can run the scripts without Docker.
-
-**1. Create a virtual environment** (keeps dependencies isolated from the rest of your system)
-
-```bash
-python3 -m venv .venv
-```
-
-**2. Activate it**
-
-On Mac / Linux:
-```bash
-source .venv/bin/activate
-```
-
-On Windows:
-```bash
-.venv\Scripts\activate
-```
-
-**3. Install dependencies**
-
-```bash
-pip install -r requirements.txt
-```
-
-**4. Run a sample**
-
 ```bash
 python graphql/01_check_usage.py
 ```
 
-> The virtual environment only needs to be created and set up once. After that, just activate it (`source .venv/bin/activate`) before running scripts.
+Replace the script path with whichever sample you want to run.
 
 ---
 
@@ -102,8 +129,9 @@ The GraphQL API endpoint is `https://api.leadiq.com/graphql`. It supports rich q
 | Script | What it does | Credits used |
 |--------|-------------|--------------|
 | `graphql/01_check_usage.py` | Verifies your API key and displays your current credit usage | None |
+| `graphql/02_advanced_search.py` | Finds people by role, seniority, and location — returns their IDs | 1 per page of results |
 
-Expected output:
+Expected output for `01_check_usage.py`:
 
 ```
 Connecting to LeadIQ API... done.
@@ -128,7 +156,7 @@ The REST API endpoint is `https://prospector.leadiq.com`. Samples coming soon.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `LEADIQ_API_KEY is not set` | `.env` file is missing or empty | Follow Setup steps 2 and 3 above |
+| `LEADIQ_API_KEY is not set` | `.env` file is missing or empty | Follow Setup steps 5 above |
 | `Error: Invalid API key` | The key in `.env` is wrong | Double-check you copied the **Secret Base64** key from LeadIQ Settings → API Keys |
 | `Error 402: Insufficient credits` | Your account has no credits left | Log in to LeadIQ and check your plan |
 | `Too many requests` | Requests sent too quickly | Wait a moment and try again |
