@@ -1,14 +1,14 @@
 # LeadIQ API — Python Samples
 
-Ready-to-run Python scripts that show you how to use the LeadIQ API. No Python installation needed — everything runs inside Docker.
+Ready-to-run Python scripts that show you how to use the LeadIQ API.
 
 ---
 
 ## What you will need
 
-- **Docker Desktop** installed and running — [download here](https://www.docker.com/products/docker-desktop/)
 - A **LeadIQ account** with API access enabled
 - Your **Secret Base64 API key** — find it in LeadIQ under **Settings → API Keys**
+- Either **Docker Desktop** or **Python 3.10+** installed on your machine (see options below)
 
 ---
 
@@ -41,13 +41,55 @@ Save the file. You only need to do this once.
 
 ## Running the samples
 
-Each sample is a standalone script. Run it with:
+Choose the option that matches what you have installed.
+
+### Option A — Docker (no Python required)
+
+If you have [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed, you do not need Python on your machine. Docker handles everything.
 
 ```bash
-docker compose run --rm leadiq python <path/to/script.py>
+docker compose run --rm leadiq python graphql/01_check_usage.py
 ```
 
-The first run will take a minute to download and build the Docker image. Subsequent runs are much faster.
+The first run will take a minute to download and build the image. Subsequent runs are much faster.
+
+---
+
+### Option B — Python directly
+
+If you have Python 3.10 or later installed, you can run the scripts without Docker.
+
+**1. Create a virtual environment** (keeps dependencies isolated from the rest of your system)
+
+```bash
+python3 -m venv .venv
+```
+
+**2. Activate it**
+
+On Mac / Linux:
+```bash
+source .venv/bin/activate
+```
+
+On Windows:
+```bash
+.venv\Scripts\activate
+```
+
+**3. Install dependencies**
+
+```bash
+pip install -r requirements.txt
+```
+
+**4. Run a sample**
+
+```bash
+python graphql/01_check_usage.py
+```
+
+> The virtual environment only needs to be created and set up once. After that, just activate it (`source .venv/bin/activate`) before running scripts.
 
 ---
 
@@ -61,23 +103,17 @@ The GraphQL API endpoint is `https://api.leadiq.com/graphql`. It supports rich q
 |--------|-------------|--------------|
 | `graphql/01_check_usage.py` | Verifies your API key and displays your current credit usage | None |
 
-**Example:**
-
-```bash
-docker compose run --rm leadiq python graphql/01_check_usage.py
-```
-
 Expected output:
 
 ```
-Connecting to LeadIQ API... done (0.45s)
+Connecting to LeadIQ API... done.
 
-Subscription status: active
+Subscription status : active
 
-Credit Type             Plan                      Used       Cap  Billing
-------------------------------------------------------------------------
-Contact (Page)          Starter                      5       500  monthly
-Contact (ExactMatch)    Starter                      2       100  monthly
+Credit Type                Plan                   Used      Cap  Billing
+----------------------------------------------------------------------
+Contact (Page)             Starter                   5      500  monthly
+Contact (ExactMatch)       Starter                   2      100  monthly
 ```
 
 ---
@@ -92,10 +128,10 @@ The REST API endpoint is `https://prospector.leadiq.com`. Samples coming soon.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `LEADIQ_API_KEY is not set` | `.env` file is missing or empty | Follow Setup step 2 and 3 above |
-| `Error 401: Invalid or missing API key` | The key in `.env` is wrong | Double-check you copied the **Secret Base64** key from LeadIQ Settings → API Keys |
+| `LEADIQ_API_KEY is not set` | `.env` file is missing or empty | Follow Setup steps 2 and 3 above |
+| `Error: Invalid API key` | The key in `.env` is wrong | Double-check you copied the **Secret Base64** key from LeadIQ Settings → API Keys |
 | `Error 402: Insufficient credits` | Your account has no credits left | Log in to LeadIQ and check your plan |
-| `Rate limit hit` | Too many requests in a short time | The script retries automatically with a delay — just wait |
+| `Too many requests` | Requests sent too quickly | Wait a moment and try again |
 
 ---
 
