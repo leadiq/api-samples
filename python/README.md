@@ -144,6 +144,27 @@ Contact (Page)             Starter                   5      500  monthly
 Contact (ExactMatch)       Starter                   2      100  monthly
 ```
 
+Expected output for `02_advanced_search.py`:
+
+```
+Searching LeadIQ API...
+  Roles      : Sales
+  Seniorities: VP, Director, Manager
+  Location   : New Hampshire, United States
+
+Found 42 people. Fetching IDs (25 per page)...
+
+#      ID
+--------------------------------------------------
+1      abc123def456
+2      xyz789ghi012
+3      jkl345mno678
+...
+42     pqr901stu234
+
+Total: 42 IDs retrieved.
+```
+
 ---
 
 ### REST API (`rest/`)
