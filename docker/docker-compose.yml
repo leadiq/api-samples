@@ -22,3 +22,15 @@ services:
       # Without this line, mounting ../typescript:/app would hide the
       # container's node_modules and the scripts would fail to run.
       - /app/node_modules
+
+  # Bash samples — no language runtime needed, only curl
+  leadiq-bash:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.bash
+    environment:
+      # Pass LEADIQ_API_KEY from the host environment into the container.
+      # Set it on the host before running: export LEADIQ_API_KEY=your_key
+      - LEADIQ_API_KEY
+    volumes:
+      - ../bash:/app

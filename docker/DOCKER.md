@@ -1,6 +1,6 @@
 # Running with Docker
 
-If you are comfortable with Docker, you can run the samples without installing Python or Node.js locally.
+If you are comfortable with Docker, you can run the samples without installing Python, Node.js, or any other tool locally.
 
 ---
 
@@ -13,27 +13,30 @@ If you are comfortable with Docker, you can run the samples without installing P
 
 ## Setup
 
-**1. Create your environment file**
+### Python and TypeScript — use an `.env` file
 
-For Python samples, from the repo root:
-
-```bash
-cp python/.env.example python/.env
-```
-
-For TypeScript samples:
+Copy the example file for the language you want to use:
 
 ```bash
-cp typescript/.env.example typescript/.env
+cp python/.env.example python/.env        # for Python
+cp typescript/.env.example typescript/.env  # for TypeScript
 ```
 
-Open the `.env` file(s) and add your API key:
+Open the `.env` file and add your API key:
 
 ```
 LEADIQ_API_KEY=ABCdef123...
 ```
 
-**2. Build the images**
+### Bash — use an environment variable
+
+```bash
+export LEADIQ_API_KEY=ABCdef123...
+```
+
+---
+
+## Build the images
 
 From the `docker/` directory:
 
@@ -41,11 +44,12 @@ From the `docker/` directory:
 docker compose build
 ```
 
-This builds both the Python and TypeScript images. To build only one:
+To build only one language:
 
 ```bash
-docker compose build leadiq-python    # Python only
-docker compose build leadiq-ts        # TypeScript only
+docker compose build leadiq-python   # Python only
+docker compose build leadiq-ts       # TypeScript only
+docker compose build leadiq-bash     # Bash only
 ```
 
 ---
@@ -53,8 +57,6 @@ docker compose build leadiq-ts        # TypeScript only
 ## Running a sample
 
 ### Python
-
-From the `docker/` directory:
 
 ```bash
 docker compose run --rm leadiq-python python graphql/01_check_usage.py
@@ -70,11 +72,19 @@ docker compose run --rm leadiq-ts npx ts-node graphql/02_advanced_search.ts
 docker compose run --rm leadiq-ts npx ts-node graphql/03_enrich_profiles.ts
 ```
 
+### Bash
+
+```bash
+docker compose run --rm leadiq-bash bash graphql/01_check_usage.sh
+docker compose run --rm leadiq-bash bash graphql/02_advanced_search.sh
+docker compose run --rm leadiq-bash bash graphql/03_enrich_profiles.sh
+```
+
 ---
 
 ## Notes
 
 - The `--rm` flag removes the container after it finishes — no cleanup needed.
-- Your `.env` file is loaded automatically by the Compose config.
-- The source directories (`python/` and `typescript/`) are mounted as volumes, so any changes you make to the scripts are reflected immediately without rebuilding the image.
+- The source directories are mounted as volumes so edits to scripts take effect immediately without rebuilding.
 - For the TypeScript service, `node_modules` is kept inside the container and is not affected by the volume mount — so you do not need to run `npm install` locally.
+- For the Bash service, `LEADIQ_API_KEY` is read from your current shell environment rather than an `.env` file — make sure you have run `export LEADIQ_API_KEY=...` before running `docker compose`.

@@ -10,6 +10,7 @@ Ready-to-run code samples showing how to use the LeadIQ API across multiple lang
 |--------|----------|--------|
 | [`python/`](python/README.md) | Python | Available |
 | [`typescript/`](typescript/README.md) | TypeScript | Available |
+| [`bash/`](bash/README.md) | Bash | Available |
 
 ---
 
