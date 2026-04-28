@@ -1,0 +1,9 @@
+services:
+  leadiq:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../python/.env
+    volumes:
+      - ../python:/app

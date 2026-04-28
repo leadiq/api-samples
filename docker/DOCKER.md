@@ -15,11 +15,13 @@ If you are comfortable with Docker, you can run the samples without installing P
 
 **1. Create your environment file**
 
+From the repo root:
+
 ```bash
-cp .env.example .env
+cp python/.env.example python/.env
 ```
 
-Open `.env` and add your API key:
+Open `python/.env` and add your API key:
 
 ```
 LEADIQ_API_KEY=ABCdef123...
@@ -28,12 +30,15 @@ LEADIQ_API_KEY=ABCdef123...
 **2. Build the image**
 
 ```bash
+cd docker
 docker compose build
 ```
 
 ---
 
 ## Running a sample
+
+From the `docker/` directory:
 
 ```bash
 docker compose run --rm leadiq python graphql/01_check_usage.py
@@ -46,5 +51,5 @@ Replace the script path with whichever sample you want to run.
 ## Notes
 
 - The `--rm` flag removes the container after it finishes — no cleanup needed.
-- Your `.env` file is loaded automatically by the Compose config.
-- The project directory is mounted as a volume, so any changes you make to the scripts are reflected immediately without rebuilding the image.
+- Your `python/.env` file is loaded automatically by the Compose config.
+- The `python/` directory is mounted as a volume, so any changes you make to the scripts are reflected immediately without rebuilding the image.
