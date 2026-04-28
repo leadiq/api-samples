@@ -130,6 +130,7 @@ The GraphQL API endpoint is `https://api.leadiq.com/graphql`. It supports rich q
 |--------|-------------|--------------|
 | `graphql/01_check_usage.py` | Verifies your API key and displays your current credit usage | None |
 | `graphql/02_advanced_search.py` | Finds people by role, seniority, and location — saves their IDs to `output/advanced_search_ids.json` | 1 per page of results |
+| `graphql/03_enrich_profiles.py` | Reads IDs from `output/advanced_search_ids.json` and enriches each person with their work email and direct phone — saves results to `output/enriched_profiles.json` | 1 Enrich credit per person |
 
 Expected output for `01_check_usage.py`:
 
@@ -164,6 +165,28 @@ Found 42 people. Fetching IDs (25 per page)...
 
 Total: 42 IDs retrieved.
 Saved to output/advanced_search_ids.json
+```
+
+Expected output for `03_enrich_profiles.py`:
+
+```
+Input file : output/advanced_search_ids.json
+Total IDs  : 42
+Processing : 10 (MAX_PEOPLE=10)
+Batches    : 1 × up to 25 people each
+Max credits: 10 Enrich credits
+
+Batch 1/1 — enriching 10 profiles... done (10 enriched, 0 errors)
+
+#     Name                         Title                          Company                  Work Email                       Direct Phone
+----------------------------------------------------------------------------------------------------------------------------------
+1     Jane Smith                   VP of Sales                    Acme Corp                jane.smith@acme.com              +16035551234
+2     John Doe                     Sales Director                 Example Inc              john.doe@example.com             —
+...
+
+Enriched : 10
+Errors   : 0
+Saved to output/enriched_profiles.json
 ```
 
 ---
