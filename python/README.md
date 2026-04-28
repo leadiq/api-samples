@@ -129,7 +129,7 @@ The GraphQL API endpoint is `https://api.leadiq.com/graphql`. It supports rich q
 | Script | What it does | Credits used |
 |--------|-------------|--------------|
 | `graphql/01_check_usage.py` | Verifies your API key and displays your current credit usage | None |
-| `graphql/02_advanced_search.py` | Finds people by role, seniority, and location — returns their IDs | 1 per page of results |
+| `graphql/02_advanced_search.py` | Finds people by role, seniority, and location — saves their IDs to `output/advanced_search_ids.json` | 1 per page of results |
 
 Expected output for `01_check_usage.py`:
 
@@ -163,6 +163,7 @@ Found 42 people. Fetching IDs (25 per page)...
 42     pqr901stu234
 
 Total: 42 IDs retrieved.
+Saved to output/advanced_search_ids.json
 ```
 
 ---
