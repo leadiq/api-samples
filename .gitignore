@@ -1,6 +1,9 @@
 # Environment — never commit your API keys
 .env
 
+# Sample output files
+output/
+
 # Python
 __pycache__/
 *.py[cod]

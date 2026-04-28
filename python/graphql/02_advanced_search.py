@@ -7,9 +7,10 @@ level located in New Hampshire, and prints their LeadIQ IDs.
 IMPORTANT: Each page of results consumes one "Advanced Search (Page)" credit.
 
 Run it with:
-    docker compose run --rm leadiq python graphql/02_advanced_search.py
+    python graphql/02_advanced_search.py
 """
 
+import json
 import os
 import sys
 import requests
@@ -160,6 +161,14 @@ def main():
         print(f"{i:<6} {person_id}")
 
     print(f"\nTotal: {len(all_ids)} IDs retrieved.")
+
+    # Save to output/advanced_search_ids.json for use in other samples.
+    output_path = os.path.join(os.path.dirname(__file__), "..", "output", "advanced_search_ids.json")
+    output_path = os.path.normpath(output_path)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(all_ids, f, indent=2)
+    print(f"Saved to {output_path}")
 
 
 if __name__ == "__main__":

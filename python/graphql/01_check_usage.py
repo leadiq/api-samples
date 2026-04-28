@@ -5,7 +5,7 @@ This is the simplest call you can make to the LeadIQ API.
 It does NOT consume any credits.
 
 Run it with:
-    docker compose run --rm leadiq python graphql/01_check_usage.py
+    python graphql/01_check_usage.py
 """
 
 import os
