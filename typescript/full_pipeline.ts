@@ -66,7 +66,7 @@ const ENRICH_DELAY_MS = 500;
 // ── Prospector list settings (Steps 3–5) ──────────────────────────────────────
 
 // This name is intentionally different from sample 04 to avoid a 409 conflict.
-const LIST_NAME = "Sales Leaders in NH - Pipeline";
+const LIST_NAME = "Sales Leaders in NH - Pipeline - TS";
 const LIST_DESCRIPTION =
   "VP, Director, and Manager level Sales professionals in New Hampshire " +
   "— created by the full_pipeline.ts end-to-end sample.";

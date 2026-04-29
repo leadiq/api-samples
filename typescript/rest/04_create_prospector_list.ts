@@ -36,7 +36,7 @@ const PROSPECTOR_URL = "https://prospector.leadiq.com";
 const API_KEY = process.env.LEADIQ_API_KEY;
 
 // Change LIST_NAME here if you want to create a list with a different name.
-const LIST_NAME = "Sales Leaders in New Hampshire";
+const LIST_NAME = "Sales Leaders in New Hampshire - TS";
 const LIST_DESCRIPTION =
   "VP, Director, and Manager level Sales professionals in New Hampshire " +
   "— sourced via LeadIQ advanced search.";
