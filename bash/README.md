@@ -75,15 +75,18 @@ The individual scripts below are numbered and build on each other. Run them in o
 Expected output for `01_check_usage.sh`:
 
 ```
-Connecting to LeadIQ API...
-Done.
+Connecting to LeadIQ API... done.
 
-Subscription : active
+Plans:
+  Name                            Product       Status        Next Billing Period
+  --------------------------------------------------------------------------
+  Starter Annual                  Api           active        2026-05-01T00:00:00.000Z
 
-Credit usage :
-  Contact (Page)
-  Contact (ExactMatch)
-  ...
+DataHub Plan — Starter Annual (active)
+  Used      : 7
+  Available : 493
+  Total     : 500
+  Resets    : 2026-05-01T00:00:00.000Z
 ```
 
 Expected output for `02_advanced_search.sh`:

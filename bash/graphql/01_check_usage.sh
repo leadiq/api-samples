@@ -31,11 +31,11 @@ fi
 
 # GraphQL query written as a single line so it can be embedded directly in the
 # JSON request body without any extra escaping.
-QUERY='query { usage { subscription { status } planUsage { name creditType units cap billingType } } }'
+QUERY='query Account { account { plans { name product status nextBillingPeriod } dataHubPlan { name product status nextBillingPeriod available used } universalPlan { name product status nextBillingPeriod available used } } }'
 
 # ── Call the API ───────────────────────────────────────────────────────────────
 
-echo "Connecting to LeadIQ API..."
+printf "Connecting to LeadIQ API... "
 
 # curl flags used here:
 #   -s            silent — no progress bar
@@ -43,14 +43,18 @@ echo "Connecting to LeadIQ API..."
 #   -X POST       send an HTTP POST request
 #   -H            add a request header
 #   --data-raw    set the request body (avoids curl interpreting @ characters)
-response=$(curl -s --max-time 30 \
+if ! response=$(curl -s --max-time 30 \
   -X POST "$GRAPHQL_URL" \
   -H "Authorization: Basic $LEADIQ_API_KEY" \
   -H "Content-Type: application/json" \
-  --data-raw "{\"query\":\"$QUERY\"}") || {
+  --data-raw "{\"query\":\"$QUERY\"}"); then
+  echo "failed."
   echo "Error: Could not reach the API. Check your internet connection."
   exit 1
-}
+fi
+
+echo "done."
+echo ""
 
 # The LeadIQ API always returns HTTP 200, even for errors.
 # Real error details are inside the "errors" field of the response body.
@@ -66,25 +70,64 @@ if echo "$response" | grep -q '"errors"'; then
   exit 1
 fi
 
-echo "Done."
-echo ""
+# ── Display plans ──────────────────────────────────────────────────────────────
 
-# ── Display results ────────────────────────────────────────────────────────────
+# Extract the plans array from the response.
+# Replacing null nextBillingPeriod values with "N/A" keeps the column count
+# consistent when paste combines the four field streams below.
+plans_raw=$(echo "$response" | grep -oE '"plans":\[[^]]*\]' | head -1 | \
+  sed 's/"nextBillingPeriod":null/"nextBillingPeriod":"N\/A"/g')
 
-# Extract the subscription status from the response.
-# grep -oE prints only the matching part; cut splits on quotes and takes field 4.
-sub_status=$(echo "$response" | grep -oE '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
-echo "Subscription : $sub_status"
-echo ""
+echo "Plans:"
+printf "  %-32s %-14s %-12s %s\n" "Name" "Product" "Status" "Next Billing Period"
+printf "  %s\n" "$(printf '%0.s-' {1..74})"
 
-# Extract and display each credit type.
-# The response contains multiple objects with creditType, units, and cap fields.
-# We extract each field separately and print them together.
-echo "Credit usage :"
-echo "$response" | grep -oE '"creditType":"[^"]*"' | cut -d'"' -f4 | \
-while IFS= read -r credit_type; do
-  echo "  $credit_type"
+# paste combines four parallel streams (one field per line from each) into tab-
+# separated rows. IFS=$'\t' splits on the tab so each field lands in its own
+# variable for printf to align.
+paste \
+  <(echo "$plans_raw" | grep -oE '"name":"[^"]*"'              | cut -d'"' -f4) \
+  <(echo "$plans_raw" | grep -oE '"product":"[^"]*"'           | cut -d'"' -f4) \
+  <(echo "$plans_raw" | grep -oE '"status":"[^"]*"'            | cut -d'"' -f4) \
+  <(echo "$plans_raw" | grep -oE '"nextBillingPeriod":"[^"]*"' | cut -d'"' -f4) \
+| while IFS=$'\t' read -r name product status next; do
+  printf "  %-32s %-14s %-12s %s\n" "$name" "$product" "$status" "${next:-N/A}"
 done
-echo ""
-echo "Full response saved below (copy to https://jsonformatter.org for a readable view):"
-echo "$response"
+
+# ── Display DataHub credit plan ────────────────────────────────────────────────
+
+# Extract the dataHubPlan object (it has no nested objects, so [^}]* is safe).
+dh_json=$(echo "$response" | grep -oE '"dataHubPlan":\{[^}]*\}' | head -1)
+if [[ -n "$dh_json" ]]; then
+  dh_name=$(     echo "$dh_json" | grep -oE '"name":"[^"]*"'              | head -1 | cut -d'"' -f4)
+  dh_status=$(   echo "$dh_json" | grep -oE '"status":"[^"]*"'            | head -1 | cut -d'"' -f4)
+  dh_next=$(     echo "$dh_json" | grep -oE '"nextBillingPeriod":"[^"]*"' | head -1 | cut -d'"' -f4)
+  dh_available=$(echo "$dh_json" | grep -oE '"available":[0-9]+'          | head -1 | cut -d':' -f2)
+  dh_used=$(     echo "$dh_json" | grep -oE '"used":[0-9]+'               | head -1 | cut -d':' -f2)
+  dh_total=$((dh_available + dh_used))
+  echo ""
+  echo "DataHub Plan — $dh_name ($dh_status)"
+  echo "  Used      : $dh_used"
+  echo "  Available : $dh_available"
+  echo "  Total     : $dh_total"
+  [[ -n "$dh_next" ]] && echo "  Resets    : $dh_next"
+fi
+
+# ── Display Universal credit plan ─────────────────────────────────────────────
+
+# Same structure as dataHubPlan.
+uv_json=$(echo "$response" | grep -oE '"universalPlan":\{[^}]*\}' | head -1)
+if [[ -n "$uv_json" ]]; then
+  uv_name=$(     echo "$uv_json" | grep -oE '"name":"[^"]*"'              | head -1 | cut -d'"' -f4)
+  uv_status=$(   echo "$uv_json" | grep -oE '"status":"[^"]*"'            | head -1 | cut -d'"' -f4)
+  uv_next=$(     echo "$uv_json" | grep -oE '"nextBillingPeriod":"[^"]*"' | head -1 | cut -d'"' -f4)
+  uv_available=$(echo "$uv_json" | grep -oE '"available":[0-9]+'          | head -1 | cut -d':' -f2)
+  uv_used=$(     echo "$uv_json" | grep -oE '"used":[0-9]+'               | head -1 | cut -d':' -f2)
+  uv_total=$((uv_available + uv_used))
+  echo ""
+  echo "Universal Plan — $uv_name ($uv_status)"
+  echo "  Used      : $uv_used"
+  echo "  Available : $uv_available"
+  echo "  Total     : $uv_total"
+  [[ -n "$uv_next" ]] && echo "  Resets    : $uv_next"
+fi

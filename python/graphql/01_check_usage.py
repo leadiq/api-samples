@@ -22,20 +22,32 @@ API_KEY = os.getenv("LEADIQ_API_KEY")
 
 # ── Query ──────────────────────────────────────────────────────────────────────
 
-# This GraphQL query asks the API for your current plan and credit usage.
+# This GraphQL query asks the API for your current plans and credit usage.
 # You can paste it into any GraphQL client (e.g. Insomnia, Postman) to try it manually.
-USAGE_QUERY = """
-query Usage {
-  usage {
-    planUsage {
+ACCOUNT_QUERY = """
+query Account {
+  account {
+    plans {
       name
-      creditType
-      units
-      cap
-      billingType
-    }
-    subscription {
+      product
       status
+      nextBillingPeriod
+    }
+    dataHubPlan {
+      name
+      product
+      status
+      nextBillingPeriod
+      available
+      used
+    }
+    universalPlan {
+      name
+      product
+      status
+      nextBillingPeriod
+      available
+      used
     }
   }
 }
@@ -64,7 +76,7 @@ def main():
     try:
         response = requests.post(
             GRAPHQL_URL,
-            json={"query": USAGE_QUERY},
+            json={"query": ACCOUNT_QUERY},
             headers=headers,
             timeout=30,
         )
@@ -93,32 +105,42 @@ def main():
             print(f"API error: {error.get('message', 'Unknown error')}")
         sys.exit(1)
 
-    # Pull out the usage data from the response.
-    usage = result["data"]["usage"]
-    subscription_status = usage["subscription"]["status"]
-    plan_usage = usage["planUsage"]
+    # Pull out the account data from the response.
+    account = result["data"]["account"]
 
-    # Print a summary.
-    print(f"Subscription status : {subscription_status}\n")
-
-    if not plan_usage:
-        print("No credit usage data available.")
-        return
-
-    # Print each credit type as a table row.
-    print(f"{'Credit Type':<26} {'Plan':<20} {'Used':>6} {'Cap':>8}  {'Billing'}")
-    print("-" * 70)
-
-    for entry in plan_usage:
-        cap = entry["cap"]
-        cap_str = str(cap) if cap is not None else "unlimited"
+    # Print plan statuses as a table.
+    col1, col2, col3 = 30, 14, 12
+    print("Plans:")
+    print(
+        ("  " + "Name").ljust(col1 + 2) +
+        "Product".ljust(col2) +
+        "Status".ljust(col3) +
+        "Next Billing Period"
+    )
+    print("  " + "-" * 74)
+    for plan in account["plans"]:
         print(
-            f"{entry['creditType']:<26} "
-            f"{entry['name']:<20} "
-            f"{entry['units'] or 0:>6} "
-            f"{cap_str:>8}  "
-            f"{entry['billingType']}"
+            ("  " + plan["name"]).ljust(col1 + 2) +
+            plan["product"].ljust(col2) +
+            plan["status"].ljust(col3) +
+            (plan["nextBillingPeriod"] or "N/A")
         )
+
+    # Print credit usage for DataHub and Universal plans.
+    credit_plans = [
+        ("DataHub", account["dataHubPlan"]),
+        ("Universal", account["universalPlan"]),
+    ]
+    for label, plan in credit_plans:
+        if not plan:
+            continue
+        total = plan["available"] + plan["used"]
+        print(f"\n{label} Plan — {plan['name']} ({plan['status']})")
+        print(f"  Used      : {plan['used']}")
+        print(f"  Available : {plan['available']}")
+        print(f"  Total     : {total}")
+        if plan["nextBillingPeriod"]:
+            print(f"  Resets    : {plan['nextBillingPeriod']}")
 
 
 if __name__ == "__main__":

@@ -151,12 +151,16 @@ Expected output for `01_check_usage.py`:
 ```
 Connecting to LeadIQ API... done.
 
-Subscription status : active
+Plans:
+  Name                            Product       Status        Next Billing Period
+  --------------------------------------------------------------------------
+  Starter Annual                  Api           active        2026-05-01T00:00:00.000Z
 
-Credit Type                Plan                   Used      Cap  Billing
-----------------------------------------------------------------------
-Contact (Page)             Starter                   5      500  monthly
-Contact (ExactMatch)       Starter                   2      100  monthly
+DataHub Plan — Starter Annual (active)
+  Used      : 7
+  Available : 493
+  Total     : 500
+  Resets    : 2026-05-01T00:00:00.000Z
 ```
 
 Expected output for `02_advanced_search.py`:
