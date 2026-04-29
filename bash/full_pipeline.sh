@@ -171,7 +171,7 @@ echo ""
 
 # ── Step 2 — Enrich profiles ───────────────────────────────────────────────────
 
-ENRICH_QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { results { id name { fullName first last } currentPositions { title companyInfo { name } emails { value status } } personalPhones { value type status } } } }'
+ENRICH_QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { results { id name { fullName first last } currentPositions { title companyInfo { name } emails { value status } } personalPhones { value verificationStatus } } } }'
 
 echo "Step 2 — Enriching ${#PERSON_IDS[@]} profiles (1 credit each)"
 
@@ -201,7 +201,7 @@ for (( i=0; i<total_ids; i++ )); do
   company=$(echo "$response" | grep -oE '"name":"[^"]*"' | sed -n '2p' | cut -d'"' -f4)
   # Work email: find value fields that look like email addresses (@-sign).
   work_email=$(echo "$response" | grep -oE '"value":"[^"@]*@[^"]+"' | head -1 | cut -d'"' -f4)
-  # Personal phone: look inside the personalPhones section.
+  # Personal phone: first entry in personalPhones.
   phone=$(echo "$response" | grep -oE '"personalPhones":\[(\{[^]]*\})*' | \
     grep -oE '"value":"[^"]+"' | head -1 | cut -d'"' -f4)
 

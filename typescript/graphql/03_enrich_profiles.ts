@@ -69,8 +69,6 @@ interface EmailRecord {
 // Shape of a single phone record returned by the API.
 interface PhoneRecord {
   value: string;
-  type: string;
-  status: string;
   verificationStatus: string;
 }
 
@@ -146,8 +144,6 @@ query SearchPeople($input: SearchPeopleInput!) {
       }
       personalPhones {
         value
-        type
-        status
         verificationStatus
       }
     }
@@ -261,37 +257,8 @@ function pickWorkEmail(currentPositions: PositionRecord[]): string | null {
   return candidates[0].value;
 }
 
-/**
- * Return the best personal (direct) phone number, or null.
- *
- * Personal phones are stored in the personalPhones field of the person record.
- * The API may return multiple numbers of different types:
- *   PersonalMobile   — mobile / cell phone  (most direct, preferred)
- *   PersonalPhone    — generic personal number
- *   PersonalLandline — home landline
- *
- * We skip any number marked as Suppressed and return the most direct type.
- */
 function pickPersonalPhone(personalPhones: PhoneRecord[]): string | null {
-  // Rank phone types — lower number means we prefer it more.
-  const typePriority: Record<string, number> = {
-    PersonalMobile: 0,
-    PersonalPhone: 1,
-    PersonalLandline: 2,
-  };
-
-  // Keep only personal phone types that haven't been suppressed.
-  const candidates = personalPhones.filter(
-    (p) => p.status !== "Suppressed" && typePriority[p.type] !== undefined
-  );
-
-  if (candidates.length === 0) return null;
-
-  // Sort by type preference and return the best one.
-  candidates.sort(
-    (a, b) => (typePriority[a.type] ?? 99) - (typePriority[b.type] ?? 99)
-  );
-  return candidates[0].value;
+  return personalPhones[0]?.value ?? null;
 }
 
 /**
