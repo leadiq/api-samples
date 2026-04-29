@@ -92,10 +92,10 @@ Save the file. You only need to do this once.
 ## Running the samples
 
 ```bash
-npx ts-node graphql/01_check_usage.ts
+npm run 01
 ```
 
-Replace the script path with whichever sample you want to run.
+Replace `01` with the number of whichever sample you want to run (`01` through `06`).
 
 ---
 
@@ -106,7 +106,7 @@ Replace the script path with whichever sample you want to run.
 If you want to run the complete workflow in a single command, use:
 
 ```bash
-npx ts-node full_pipeline.ts
+npm start
 ```
 
 This script runs all steps end-to-end — search, enrich, create list, add prospects, export — entirely in memory. The only output is `output/pipeline_prospects.csv`.
@@ -130,12 +130,16 @@ Expected output for `01_check_usage.ts`:
 ```
 Connecting to LeadIQ API... done.
 
-Subscription status : active
+Plans:
+  Name                            Product       Status        Next Billing Period
+  --------------------------------------------------------------------------
+  Starter Annual                  Api           Active        2026-05-01T00:00:00.000Z
 
-Credit Type                Plan                   Used      Cap  Billing
-----------------------------------------------------------------------
-Contact (Page)             Starter                   5      500  monthly
-Contact (ExactMatch)       Starter                   2      100  monthly
+Universal Plan — Starter Annual (Active)
+  Used      : 7
+  Available : 493
+  Total     : 500
+  Resets    : 2026-05-01T00:00:00.000Z
 ```
 
 Expected output for `02_advanced_search.ts`:

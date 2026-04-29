@@ -1,11 +1,11 @@
 /**
  * 01_check_usage.ts — Verify your API key and check your credit balance.
  *
- * This is the simplest call you can make to the LeadIQ API.
+ * Uses the `account` query to show plan status and credit usage.
  * It does NOT consume any credits.
  *
  * Run it with:
- *   npx ts-node graphql/01_check_usage.ts
+ *   npm run 01
  */
 
 import dotenv from "dotenv";
@@ -37,19 +37,28 @@ interface GraphQLError {
   };
 }
 
-interface PlanUsageEntry {
+interface Plan {
   name: string;
-  creditType: string;
-  units: number | null;
-  cap: number | null;
-  billingType: string;
+  product: string;
+  status: string;
+  nextBillingPeriod: string | null;
 }
 
-interface UsageResponse {
+interface CreditPlan {
+  name: string;
+  product: string;
+  status: string;
+  nextBillingPeriod: string | null;
+  available: number;
+  used: number;
+}
+
+interface AccountResponse {
   data?: {
-    usage: {
-      planUsage: PlanUsageEntry[];
-      subscription: { status: string };
+    account: {
+      plans: Plan[];
+      dataHubPlan: CreditPlan | null;
+      universalPlan: CreditPlan | null;
     };
   };
   errors?: GraphQLError[];
@@ -58,18 +67,30 @@ interface UsageResponse {
 // ── Query ──────────────────────────────────────────────────────────────────────
 
 // This GraphQL query asks the API for your current plan and credit usage.
-const USAGE_QUERY = `
-query Usage {
-  usage {
-    planUsage {
+const ACCOUNT_QUERY = `
+query Account {
+  account {
+    plans {
       name
-      creditType
-      units
-      cap
-      billingType
-    }
-    subscription {
+      product
       status
+      nextBillingPeriod
+    }
+    dataHubPlan {
+      name
+      product
+      status
+      nextBillingPeriod
+      available
+      used
+    }
+    universalPlan {
+      name
+      product
+      status
+      nextBillingPeriod
+      available
+      used
     }
   }
 }
@@ -85,7 +106,7 @@ query Usage {
 async function sendRequest(
   headers: Record<string, string>,
   body: object
-): Promise<UsageResponse> {
+): Promise<AccountResponse> {
   // AbortController lets us cancel the request if it takes too long.
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30_000);
@@ -97,7 +118,7 @@ async function sendRequest(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    return (await response.json()) as UsageResponse;
+    return (await response.json()) as AccountResponse;
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
       console.error("Error: The API took too long to respond. Please try again.");
@@ -131,7 +152,7 @@ async function main(): Promise<void> {
   process.stdout.write("Connecting to LeadIQ API... ");
 
   // Send the request to the API.
-  const result = await sendRequest(headers, { query: USAGE_QUERY });
+  const result = await sendRequest(headers, { query: ACCOUNT_QUERY });
 
   console.log("done.\n");
 
@@ -154,39 +175,44 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Pull out the usage data from the response.
-  const { usage } = result.data!;
-  const subscriptionStatus = usage.subscription.status;
-  const planUsage = usage.planUsage;
+  // Pull out the account data from the response.
+  const { account } = result.data!;
 
-  // Print a summary.
-  console.log(`Subscription status : ${subscriptionStatus}\n`);
-
-  if (!planUsage || planUsage.length === 0) {
-    console.log("No credit usage data available.");
-    return;
+  // Print plan statuses.
+  console.log("Plans:");
+  const col1 = 30, col2 = 14, col3 = 12;
+  console.log(
+    "  Name".padEnd(col1 + 2) +
+    "Product".padEnd(col2) +
+    "Status".padEnd(col3) +
+    "Next Billing Period"
+  );
+  console.log("  " + "-".repeat(74));
+  for (const plan of account.plans) {
+    console.log(
+      ("  " + plan.name).padEnd(col1 + 2) +
+      plan.product.padEnd(col2) +
+      plan.status.padEnd(col3) +
+      (plan.nextBillingPeriod ?? "N/A")
+    );
   }
 
-  // Print each credit type as a table row.
-  const col1 = 26, col2 = 20, col3 = 6, col4 = 8;
-  console.log(
-    "Credit Type".padEnd(col1) +
-    " " + "Plan".padEnd(col2) +
-    " " + "Used".padStart(col3) +
-    " " + "Cap".padStart(col4) +
-    "  Billing"
-  );
-  console.log("-".repeat(70));
+  // Print credit usage for DataHub and Universal plans.
+  const creditPlans: Array<[string, CreditPlan | null]> = [
+    ["DataHub", account.dataHubPlan],
+    ["Universal", account.universalPlan],
+  ];
 
-  for (const entry of planUsage) {
-    const capStr = entry.cap !== null ? String(entry.cap) : "unlimited";
-    console.log(
-      entry.creditType.padEnd(col1) +
-      " " + entry.name.padEnd(col2) +
-      " " + String(entry.units ?? 0).padStart(col3) +
-      " " + capStr.padStart(col4) +
-      "  " + entry.billingType
-    );
+  for (const [label, plan] of creditPlans) {
+    if (!plan) continue;
+    const total = plan.available + plan.used;
+    console.log(`\n${label} Plan — ${plan.name} (${plan.status})`);
+    console.log(`  Used      : ${plan.used}`);
+    console.log(`  Available : ${plan.available}`);
+    console.log(`  Total     : ${total}`);
+    if (plan.nextBillingPeriod) {
+      console.log(`  Resets    : ${plan.nextBillingPeriod}`);
+    }
   }
 }
 

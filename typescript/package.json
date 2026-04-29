@@ -7,20 +7,20 @@
     "node": ">=24"
   },
   "scripts": {
-    "01": "ts-node graphql/01_check_usage.ts",
-    "02": "ts-node graphql/02_advanced_search.ts",
-    "03": "ts-node graphql/03_enrich_profiles.ts",
-    "04": "ts-node rest/04_create_prospector_list.ts",
-    "05": "ts-node rest/05_add_prospects_to_list.ts",
-    "06": "ts-node rest/06_export_list_to_csv.ts",
-    "pipeline": "ts-node full_pipeline.ts"
+    "01": "tsx graphql/01_check_usage.ts",
+    "02": "tsx graphql/02_advanced_search.ts",
+    "03": "tsx graphql/03_enrich_profiles.ts",
+    "04": "tsx rest/04_create_prospector_list.ts",
+    "05": "tsx rest/05_add_prospects_to_list.ts",
+    "06": "tsx rest/06_export_list_to_csv.ts",
+    "start": "tsx full_pipeline.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "ts-node": "^10.9.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   }
 }
