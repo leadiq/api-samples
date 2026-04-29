@@ -90,8 +90,6 @@ query SearchPeople($input: SearchPeopleInput!) {
       }
       personalPhones {
         value
-        type
-        status
         verificationStatus
       }
     }
@@ -185,33 +183,8 @@ def pick_work_email(current_positions):
 
 
 def pick_personal_phone(personal_phones):
-    """Return the best personal (direct) phone number, or None.
-
-    Personal phones are stored in the personalPhones field of the person record.
-    The API may return multiple numbers of different types:
-      PersonalMobile   — mobile / cell phone  (most direct, preferred)
-      PersonalPhone    — generic personal number
-      PersonalLandline — home landline
-
-    We skip any number marked as Suppressed (opted out of contact) and return
-    the most direct type available.
-    """
-    # Rank phone types — lower number means we prefer it more.
-    type_priority = {"PersonalMobile": 0, "PersonalPhone": 1, "PersonalLandline": 2}
-
-    # Keep only personal phone types that haven't been suppressed.
-    candidates = [
-        phone for phone in (personal_phones or [])
-        if phone.get("status") != "Suppressed"
-        and phone.get("type") in type_priority
-    ]
-
-    if not candidates:
-        return None  # no personal phone found for this person
-
-    # Sort by type preference and return the best one.
-    candidates.sort(key=lambda p: type_priority.get(p.get("type") or "", 99))
-    return candidates[0]["value"]
+    phones = personal_phones or []
+    return phones[0]["value"] if phones else None
 
 
 def extract_profile(person):

@@ -61,7 +61,7 @@ DELAY_BETWEEN_CALLS=1
 # phone it finds in the response. The Python and TypeScript versions apply
 # confidence ranking to choose the best address — bash cannot do that
 # without a JSON parser like jq, so results may occasionally differ.
-QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { totalResults results { id name { fullName first last } currentPositions { title companyInfo { name } emails { value status } } personalPhones { value type status } } } }'
+QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { totalResults results { id name { fullName first last } currentPositions { title companyInfo { name } emails { value status } } personalPhones { value verificationStatus } } } }'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -108,9 +108,6 @@ extract_work_email() {
 
 # Extract the first personal (direct) phone number from the response.
 # Phone numbers live under the "personalPhones" key, separate from work phones.
-# The first grep isolates the personalPhones array from the rest of the JSON
-# so we don't accidentally pick up a value field from a different section.
-# The second grep then finds the first "value":"..." entry inside that array.
 extract_personal_phone() {
   local response="$1"
   echo "$response" | grep -oE '"personalPhones":\[(\{[^]]*\})*' | \

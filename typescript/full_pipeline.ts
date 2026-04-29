@@ -248,7 +248,7 @@ query SearchPeople($input: SearchPeopleInput!) {
         companyInfo { name }
         emails { value status }
       }
-      personalPhones { value type status }
+      personalPhones { value verificationStatus }
     }
   }
 }`;
@@ -261,7 +261,7 @@ interface PersonRecord {
     companyInfo?: { name?: string };
     emails?: Array<{ value: string; status: string }>;
   }>;
-  personalPhones?: Array<{ value: string; type: string; status: string }>;
+  personalPhones?: Array<{ value: string; verificationStatus: string }>;
 }
 
 function bestEmail(
@@ -278,13 +278,7 @@ function bestEmail(
 }
 
 function bestPhone(phones: PersonRecord["personalPhones"]): string | null {
-  const order: Record<string, number> = { PersonalMobile: 0, PersonalPhone: 1, PersonalLandline: 2 };
-  const candidates = (phones ?? []).filter(
-    (p) => p.status !== "Suppressed" && order[p.type] !== undefined
-  );
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => (order[a.type] ?? 99) - (order[b.type] ?? 99));
-  return candidates[0].value;
+  return phones?.[0]?.value ?? null;
 }
 
 async function enrichProfiles(ids: string[]): Promise<EnrichedProfile[]> {

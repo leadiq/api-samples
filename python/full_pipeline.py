@@ -240,7 +240,7 @@ query SearchPeople($input: SearchPeopleInput!) {
         companyInfo { name }
         emails { value status }
       }
-      personalPhones { value type status }
+      personalPhones { value verificationStatus }
     }
   }
 }
@@ -264,17 +264,8 @@ def _best_email(positions):
 
 
 def _best_phone(phones):
-    # Personal phones live at the top level of the person record.
-    # We prefer mobile over other types and skip suppressed numbers.
-    order = {"PersonalMobile": 0, "PersonalPhone": 1, "PersonalLandline": 2}
-    candidates = [
-        p for p in (phones or [])
-        if p.get("status") != "Suppressed" and p.get("type") in order
-    ]
-    if not candidates:
-        return None
-    candidates.sort(key=lambda p: order.get(p.get("type") or "", 99))
-    return candidates[0]["value"]
+    phones = phones or []
+    return phones[0]["value"] if phones else None
 
 
 def enrich_profiles(ids):
