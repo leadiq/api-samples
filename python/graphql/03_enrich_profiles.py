@@ -72,6 +72,7 @@ query SearchPeople($input: SearchPeopleInput!) {
     totalResults
     results {
       id
+      linkedin { linkedinUrl }
       name {
         fullName
         first
@@ -79,6 +80,8 @@ query SearchPeople($input: SearchPeopleInput!) {
       }
       currentPositions {
         title
+        seniority
+        function
         companyInfo {
           name
         }
@@ -199,17 +202,19 @@ def extract_profile(person):
     current = positions[0] if positions else {}
     company_info = current.get("companyInfo") or {}
 
+    linkedin = person.get("linkedin") or {}
     return {
-        "id":          person.get("id"),
-        "full_name":   name.get("fullName"),
-        "first_name":  name.get("first"),
-        "last_name":   name.get("last"),
-        "title":       current.get("title"),
-        "company":     company_info.get("name"),
-        # Work emails live inside currentPositions — we search all positions.
-        "work_email":  pick_work_email(positions),
-        # Personal phones live at the top level of the person record.
+        "id":           person.get("id"),
+        "full_name":    name.get("fullName"),
+        "first_name":   name.get("first"),
+        "last_name":    name.get("last"),
+        "title":        current.get("title"),
+        "seniority":    current.get("seniority"),
+        "function":     current.get("function"),
+        "company":      company_info.get("name"),
+        "work_email":   pick_work_email(positions),
         "direct_phone": pick_personal_phone(person.get("personalPhones")),
+        "linkedin_url": linkedin.get("linkedinUrl"),
     }
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -287,10 +292,9 @@ def main():
     # ── Print a summary table ──────────────────────────────────────────────────
 
     print()
-    print(f"{'#':<5} {'Name':<28} {'Title':<30} {'Company':<24} {'Work Email':<32} {'Direct Phone'}")
-    print("-" * 130)
+    print(f"{'#':<5} {'Name':<28} {'Seniority':<12} {'Function':<14} {'Title':<30} {'Company':<24} {'Work Email':<32} {'Direct Phone'}")
+    print("-" * 160)
     for i, p in enumerate(enriched, start=1):
-        # Fall back gracefully if fullName is missing.
         name = (
             p["full_name"]
             or f"{p['first_name'] or ''} {p['last_name'] or ''}".strip()
@@ -299,6 +303,8 @@ def main():
         print(
             f"{i:<5} "
             f"{name:<28} "
+            f"{(p['seniority'] or '—'):<12} "
+            f"{(p['function'] or '—'):<14} "
             f"{(p['title'] or '—'):<30} "
             f"{(p['company'] or '—'):<24} "
             f"{(p['work_email'] or '—'):<32} "

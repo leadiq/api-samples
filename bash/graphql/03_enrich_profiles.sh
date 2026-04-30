@@ -61,7 +61,7 @@ DELAY_BETWEEN_CALLS=1
 # phone it finds in the response. The Python and TypeScript versions apply
 # confidence ranking to choose the best address — bash cannot do that
 # without a JSON parser like jq, so results may occasionally differ.
-QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { totalResults results { id name { fullName first last } currentPositions { title companyInfo { name } emails { value status } } personalPhones { value verificationStatus } } } }'
+QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { totalResults results { id linkedin { linkedinUrl } name { fullName first last } currentPositions { title seniority function companyInfo { name } emails { value status } } personalPhones { value verificationStatus } } } }'
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -142,9 +142,9 @@ echo ""
 
 # Write the output file header.
 mkdir -p "$(dirname "$OUTPUT_FILE")"
-printf "%-40s %-25s %-35s %-20s %s\n" \
-  "ID" "Name" "Work Email" "Direct Phone" "Title" > "$OUTPUT_FILE"
-printf '%s\n' "$(printf '%.0s-' {1..130})" >> "$OUTPUT_FILE"
+printf "%-40s %-25s %-12s %-14s %-35s %-20s %-60s %s\n" \
+  "ID" "Name" "Seniority" "Function" "Work Email" "Direct Phone" "LinkedIn URL" "Title" > "$OUTPUT_FILE"
+printf '%s\n' "$(printf '%.0s-' {1..220})" >> "$OUTPUT_FILE"
 
 enriched=0
 not_found=0
@@ -177,8 +177,11 @@ for (( i=0; i<total; i++ )); do
   # Extract the fields we care about.
   full_name=$(extract_field   "$response" "fullName")
   title=$(extract_field       "$response" "title")
+  seniority=$(extract_field   "$response" "seniority")
+  function=$(extract_field    "$response" "function")
   work_email=$(extract_work_email  "$response")
   direct_phone=$(extract_personal_phone "$response")
+  linkedin_url=$(echo "$response" | grep -oE '"linkedinUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
 
   # Show a quick summary line for this person.
   email_indicator=$([ -n "$work_email"   ] && echo "✓ email" || echo "— email")
@@ -186,11 +189,14 @@ for (( i=0; i<total; i++ )); do
   echo "$email_indicator  $phone_indicator"
 
   # Append a row to the output file.
-  printf "%-40s %-25s %-35s %-20s %s\n" \
+  printf "%-40s %-25s %-12s %-14s %-35s %-20s %-60s %s\n" \
     "$person_id" \
     "${full_name:----}" \
+    "${seniority:----}" \
+    "${function:----}" \
     "${work_email:----}" \
     "${direct_phone:----}" \
+    "${linkedin_url:----}" \
     "${title:----}" >> "$OUTPUT_FILE"
 
   (( enriched++ )) || true

@@ -75,6 +75,8 @@ interface PhoneRecord {
 // Shape of a current job position (contains work emails for that job).
 interface PositionRecord {
   title: string | null;
+  seniority: string | null;
+  function: string | null;
   companyInfo: { name: string } | null;
   emails: EmailRecord[];
 }
@@ -82,6 +84,7 @@ interface PositionRecord {
 // Shape of a full person record returned by searchPeople.
 interface PersonRecord {
   id: string;
+  linkedin: { linkedinUrl: string } | null;
   name: {
     fullName: string | null;
     first: string | null;
@@ -108,9 +111,12 @@ interface EnrichedProfile {
   first_name: string | null;
   last_name: string | null;
   title: string | null;
+  seniority: string | null;
+  function: string | null;
   company: string | null;
   work_email: string | null;
   direct_phone: string | null;
+  linkedin_url: string | null;
 }
 
 // ── Query ──────────────────────────────────────────────────────────────────────
@@ -126,6 +132,7 @@ query SearchPeople($input: SearchPeopleInput!) {
     totalResults
     results {
       id
+      linkedin { linkedinUrl }
       name {
         fullName
         first
@@ -133,6 +140,8 @@ query SearchPeople($input: SearchPeopleInput!) {
       }
       currentPositions {
         title
+        seniority
+        function
         companyInfo {
           name
         }
@@ -276,11 +285,12 @@ function extractProfile(person: PersonRecord): EnrichedProfile {
     first_name: person.name?.first ?? null,
     last_name: person.name?.last ?? null,
     title: current?.title ?? null,
+    seniority: current?.seniority ?? null,
+    function: current?.function ?? null,
     company: current?.companyInfo?.name ?? null,
-    // Work emails live inside currentPositions — we search all positions.
     work_email: pickWorkEmail(person.currentPositions ?? []),
-    // Personal phones live at the top level of the person record.
     direct_phone: pickPersonalPhone(person.personalPhones ?? []),
+    linkedin_url: person.linkedin?.linkedinUrl ?? null,
   };
 }
 
@@ -371,15 +381,16 @@ async function main(): Promise<void> {
   console.log(
     "#".padEnd(5) +
     "Name".padEnd(28) +
+    "Seniority".padEnd(12) +
+    "Function".padEnd(14) +
     "Title".padEnd(30) +
     "Company".padEnd(24) +
     "Work Email".padEnd(32) +
     "Direct Phone"
   );
-  console.log("-".repeat(130));
+  console.log("-".repeat(160));
 
   enriched.forEach((p, index) => {
-    // Fall back gracefully if fullName is missing.
     const name =
       p.full_name ||
       `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() ||
@@ -388,6 +399,8 @@ async function main(): Promise<void> {
     console.log(
       String(index + 1).padEnd(5) +
       name.padEnd(28) +
+      (p.seniority ?? "—").padEnd(12) +
+      (p.function ?? "—").padEnd(14) +
       (p.title ?? "—").padEnd(30) +
       (p.company ?? "—").padEnd(24) +
       (p.work_email ?? "—").padEnd(32) +

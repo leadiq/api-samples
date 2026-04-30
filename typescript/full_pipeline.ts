@@ -78,7 +78,10 @@ const OUTPUT_PATH = path.join(__dirname, "output", "pipeline_prospects.csv");
 
 const CSV_FIELDS = [
   "id", "name", "first_name", "last_name", "title",
+  "seniority", "function",
   "work_email", "email_status",
+  "direct_phone",
+  "linkedin_url",
   "location_city", "location_state", "location_country",
   "company_name", "company_domain", "company_industry", "company_employees",
   "updated_at",
@@ -100,9 +103,12 @@ interface EnrichedProfile {
   first_name: string | null;
   last_name: string | null;
   title: string | null;
+  seniority: string | null;
+  function: string | null;
   company: string | null;
   work_email: string | null;
   direct_phone: string | null;
+  linkedin_url: string | null;
 }
 
 interface ProspectorList { id: string; name: string; createdAt: string }
@@ -242,9 +248,12 @@ query SearchPeople($input: SearchPeopleInput!) {
   searchPeople(input: $input) {
     results {
       id
+      linkedin { linkedinUrl }
       name { fullName first last }
       currentPositions {
         title
+        seniority
+        function
         companyInfo { name }
         emails { value status }
       }
@@ -255,9 +264,12 @@ query SearchPeople($input: SearchPeopleInput!) {
 
 interface PersonRecord {
   id: string;
+  linkedin?: { linkedinUrl?: string };
   name?: { fullName?: string; first?: string; last?: string };
   currentPositions?: Array<{
     title?: string;
+    seniority?: string;
+    function?: string;
     companyInfo?: { name?: string };
     emails?: Array<{ value: string; status: string }>;
   }>;
@@ -309,9 +321,12 @@ async function enrichProfiles(ids: string[]): Promise<EnrichedProfile[]> {
         first_name:   person.name?.first ?? null,
         last_name:    person.name?.last ?? null,
         title:        current.title ?? null,
+        seniority:    current.seniority ?? null,
+        function:     current.function ?? null,
         company:      current.companyInfo?.name ?? null,
         work_email:   bestEmail(person.currentPositions),
         direct_phone: bestPhone(person.personalPhones),
+        linkedin_url: person.linkedin?.linkedinUrl ?? null,
       };
       enriched.push(profile);
 
@@ -398,9 +413,12 @@ async function addProspects(
 
     const body: Record<string, string> = { firstName: first, lastName: last };
     if (profile.title)        body.title       = profile.title;
+    if (profile.seniority)    body.seniority   = profile.seniority;
+    if (profile.function)     body.function    = profile.function;
     if (profile.company)      body.company     = profile.company;
     if (profile.work_email)   body.workEmail   = profile.work_email;
     if (profile.direct_phone) body.mobilePhone = profile.direct_phone;
+    if (profile.linkedin_url) body.linkedinUrl = profile.linkedin_url;
 
     const controller = new AbortController();
     const timeoutId  = setTimeout(() => controller.abort(), 30_000);
@@ -431,7 +449,10 @@ async function addProspects(
 
 // ── Step 5 — Export to CSV ─────────────────────────────────────────────────────
 
-async function fetchAndExport(listId: string): Promise<void> {
+async function fetchAndExport(listId: string, profiles: EnrichedProfile[]): Promise<void> {
+  const profileByEmail = new Map(
+    profiles.filter((p) => p.work_email).map((p) => [p.work_email!, p])
+  );
   console.log("Step 5 — Fetching prospects and writing CSV");
 
   const allRows: CsvRow[] = [];
@@ -458,9 +479,13 @@ async function fetchAndExport(listId: string): Promise<void> {
       for (const p of result.items) {
         const loc = p.location ?? {};
         const co  = p.company  ?? {};
+        const enriched = p.workEmail ? profileByEmail.get(p.workEmail) : undefined;
         allRows.push({
           id: p.id, name: p.name, first_name: p.firstName, last_name: p.lastName,
-          title: p.title, work_email: p.workEmail, email_status: p.emailStatus,
+          title: p.title, seniority: enriched?.seniority, "function": enriched?.function,
+          work_email: p.workEmail, email_status: p.emailStatus,
+          direct_phone: enriched?.direct_phone,
+          linkedin_url: enriched?.linkedin_url,
           location_city: loc.city, location_state: loc.state, location_country: loc.country,
           company_name: co.name, company_domain: co.domain,
           company_industry: co.industry, company_employees: co.employees,
@@ -512,7 +537,7 @@ async function main(): Promise<void> {
   const profiles = await enrichProfiles(ids);
   const listId   = await createList();
   await addProspects(listId, profiles);
-  await fetchAndExport(listId);
+  await fetchAndExport(listId, profiles);
 
   console.log();
   console.log("Done.");

@@ -171,13 +171,13 @@ echo ""
 
 # ── Step 2 — Enrich profiles ───────────────────────────────────────────────────
 
-ENRICH_QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { results { id name { fullName first last } currentPositions { title companyInfo { name } emails { value status } } personalPhones { value verificationStatus } } } }'
+ENRICH_QUERY='query SearchPeople($input: SearchPeopleInput!) { searchPeople(input: $input) { results { id linkedin { linkedinUrl } name { fullName first last } currentPositions { title seniority function companyInfo { name } emails { value status } } personalPhones { value verificationStatus } } } }'
 
 echo "Step 2 — Enriching ${#PERSON_IDS[@]} profiles (1 credit each)"
 
 # Store enriched data in parallel indexed arrays.
 # Each index corresponds to one enriched person.
-declare -a E_IDS E_FIRST E_LAST E_FULL_NAMES E_TITLES E_COMPANIES E_EMAILS E_PHONES
+declare -a E_IDS E_FIRST E_LAST E_FULL_NAMES E_TITLES E_COMPANIES E_EMAILS E_PHONES E_SENIORITIES E_FUNCTIONS E_LINKEDINS
 enrich_count=0
 total_ids=${#PERSON_IDS[@]}
 
@@ -188,8 +188,7 @@ for (( i=0; i<total_ids; i++ )); do
   body=$(printf '{"query":"%s","variables":{"input":{"id":"%s"}}}' "$ENRICH_QUERY" "$pid")
   response=$(graphql_request "$body")
 
-  result_count=$(echo "$response" | grep -oE '"totalResults":[0-9]+' | grep -oE '[0-9]+$')
-  if [[ "${result_count:-0}" -eq 0 ]]; then
+  if ! echo "$response" | grep -q '"results":\[{'; then
     echo " not found — skipped"
     continue
   fi
@@ -198,21 +197,26 @@ for (( i=0; i<total_ids; i++ )); do
   first=$(echo "$response" | grep -oE '"first":"[^"]*"' | head -1 | cut -d'"' -f4)
   last=$(echo "$response" | grep -oE '"last":"[^"]*"' | head -1 | cut -d'"' -f4)
   title=$(echo "$response" | grep -oE '"title":"[^"]*"' | head -1 | cut -d'"' -f4)
-  company=$(echo "$response" | grep -oE '"name":"[^"]*"' | sed -n '2p' | cut -d'"' -f4)
-  # Work email: find value fields that look like email addresses (@-sign).
+  seniority=$(echo "$response" | grep -oE '"seniority":"[^"]*"' | head -1 | cut -d'"' -f4)
+  func=$(echo "$response" | grep -oE '"function":"[^"]*"' | head -1 | cut -d'"' -f4)
+  company=$(echo "$response" | grep -oE '"companyInfo":\{"name":"[^"]*"' | head -1 | grep -oE '"name":"[^"]*"' | cut -d'"' -f4)
   work_email=$(echo "$response" | grep -oE '"value":"[^"@]*@[^"]+"' | head -1 | cut -d'"' -f4)
-  # Personal phone: first entry in personalPhones.
   phone=$(echo "$response" | grep -oE '"personalPhones":\[(\{[^]]*\})*' | \
     grep -oE '"value":"[^"]+"' | head -1 | cut -d'"' -f4)
+  linkedin_url=$(echo "$response" | grep -oE '"linkedinUrl":"[^"]*"' | head -1 | cut -d'"' -f4)
 
   E_IDS[$enrich_count]="$pid"
   E_FIRST[$enrich_count]="$first"
   E_LAST[$enrich_count]="$last"
   E_FULL_NAMES[$enrich_count]="$full_name"
   E_TITLES[$enrich_count]="$title"
+  E_SENIORITIES[$enrich_count]="$seniority"
+  E_FUNCTIONS[$enrich_count]="$func"
   E_COMPANIES[$enrich_count]="$company"
   E_EMAILS[$enrich_count]="$work_email"
   E_PHONES[$enrich_count]="$phone"
+  E_LINKEDINS[$enrich_count]="$linkedin_url"
+
 
   email_tag=$([ -n "$work_email" ] && echo "✓ email" || echo "— email")
   phone_tag=$([ -n "$phone" ]      && echo "✓ phone" || echo "— phone")
@@ -238,7 +242,7 @@ response=$(curl -s --max-time 30 \
   -w "\n%{http_code}") || { echo ""; echo "Error: Could not reach the Prospector API."; exit 1; }
 
 http_code=$(echo "$response" | tail -1)
-body=$(echo "$response" | head -n -1)
+body=$(echo "$response" | sed '$d')
 
 case "$http_code" in
   201) ;;
@@ -263,9 +267,12 @@ for (( i=0; i<enrich_count; i++ )); do
   last="${E_LAST[$i]}"
   name="${E_FULL_NAMES[$i]}"
   title="${E_TITLES[$i]}"
+  seniority="${E_SENIORITIES[$i]}"
+  func="${E_FUNCTIONS[$i]}"
   company="${E_COMPANIES[$i]}"
   email="${E_EMAILS[$i]}"
   phone="${E_PHONES[$i]}"
+  linkedin_url="${E_LINKEDINS[$i]}"
 
   printf "  [%d/%d] %s ..." "$((i+1))" "$enrich_count" "$name"
 
@@ -276,10 +283,13 @@ for (( i=0; i<enrich_count; i++ )); do
   fi
 
   pbody="{\"firstName\":\"$first\",\"lastName\":\"$last\""
-  [[ -n "$title"   ]] && pbody+=",\"title\":\"$title\""
-  [[ -n "$company" ]] && pbody+=",\"company\":\"$company\""
-  [[ -n "$email"   ]] && pbody+=",\"workEmail\":\"$email\""
-  [[ -n "$phone"   ]] && pbody+=",\"mobilePhone\":\"$phone\""
+  [[ -n "$title"       ]] && pbody+=",\"title\":\"$title\""
+  [[ -n "$seniority"   ]] && pbody+=",\"seniority\":\"$seniority\""
+  [[ -n "$func"        ]] && pbody+=",\"function\":\"$func\""
+  [[ -n "$company"     ]] && pbody+=",\"company\":\"$company\""
+  [[ -n "$email"       ]] && pbody+=",\"workEmail\":\"$email\""
+  [[ -n "$phone"       ]] && pbody+=",\"mobilePhone\":\"$phone\""
+  [[ -n "$linkedin_url" ]] && pbody+=",\"linkedinUrl\":\"$linkedin_url\""
   pbody+="}"
 
   p_response=$(curl -s --max-time 30 \
@@ -308,7 +318,7 @@ echo "Step 5 — Fetching prospects and writing CSV"
 
 mkdir -p "$(dirname "$OUTPUT_CSV")"
 printf '%s\n' \
-  "id,name,first_name,last_name,title,work_email,email_status,location_city,location_state,location_country,company_name,company_domain,company_industry,company_employees,updated_at" \
+  "id,name,first_name,last_name,title,seniority,function,work_email,email_status,direct_phone,linkedin_url,location_city,location_state,location_country,company_name,company_domain,company_industry,company_employees,updated_at" \
   > "$OUTPUT_CSV"
 
 cursor=""
@@ -331,7 +341,7 @@ while true; do
     -w "\n%{http_code}") || { echo ""; echo "Error: Could not reach the API."; exit 1; }
 
   exp_code=$(echo "$exp_response" | tail -1)
-  exp_body=$(echo "$exp_response" | head -n -1)
+  exp_body=$(echo "$exp_response" | sed '$d')
 
   [[ "$exp_code" != "200" ]] && { echo ""; echo "Error $exp_code"; exit 1; }
 
@@ -350,6 +360,16 @@ while true; do
     email=$(extract_field "$item" "workEmail")
     email_status=$(extract_field "$item" "emailStatus")
     updated_at=$(extract_field "$item" "updatedAt")
+    direct_phone=""; seniority=""; func=""; linkedin_url=""
+    for (( j=0; j<enrich_count; j++ )); do
+      if [[ "${E_EMAILS[$j]}" == "$email" ]]; then
+        direct_phone="${E_PHONES[$j]}"
+        seniority="${E_SENIORITIES[$j]}"
+        func="${E_FUNCTIONS[$j]}"
+        linkedin_url="${E_LINKEDINS[$j]}"
+        break
+      fi
+    done
 
     loc_part=$(extract_object "$item" "location")
     loc_city=$(extract_field "$loc_part" "city")
@@ -362,11 +382,13 @@ while true; do
     co_industry=$(extract_field "$co_part" "industry")
     co_employees=$(extract_number "$co_part" "employees")
 
-    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
       "$(csv_quote "$id")"           "$(csv_quote "$name")"         \
       "$(csv_quote "$first")"        "$(csv_quote "$last")"         \
-      "$(csv_quote "$title")"        "$(csv_quote "$email")"        \
-      "$(csv_quote "$email_status")" "$(csv_quote "$loc_city")"     \
+      "$(csv_quote "$title")"        "$(csv_quote "$seniority")"    \
+      "$(csv_quote "$func")"         "$(csv_quote "$email")"        \
+      "$(csv_quote "$email_status")" "$(csv_quote "$direct_phone")" \
+      "$(csv_quote "$linkedin_url")" "$(csv_quote "$loc_city")"     \
       "$(csv_quote "$loc_state")"    "$(csv_quote "$loc_country")"  \
       "$(csv_quote "$co_name")"      "$(csv_quote "$co_domain")"    \
       "$(csv_quote "$co_industry")"  "$(csv_quote "$co_employees")" \

@@ -96,8 +96,12 @@ CSV_FIELDS = [
     "first_name",
     "last_name",
     "title",
+    "seniority",
+    "function",
     "work_email",
     "email_status",
+    "direct_phone",
+    "linkedin_url",
     "location_city",
     "location_state",
     "location_country",
@@ -234,9 +238,12 @@ query SearchPeople($input: SearchPeopleInput!) {
   searchPeople(input: $input) {
     results {
       id
+      linkedin { linkedinUrl }
       name { fullName first last }
       currentPositions {
         title
+        seniority
+        function
         companyInfo { name }
         emails { value status }
       }
@@ -290,15 +297,19 @@ def enrich_profiles(ids):
             positions = person.get("currentPositions") or []
             current   = positions[0] if positions else {}
 
+            linkedin = person.get("linkedin") or {}
             profile = {
-                "id":          person.get("id"),
-                "full_name":   name.get("fullName"),
-                "first_name":  name.get("first"),
-                "last_name":   name.get("last"),
-                "title":       current.get("title"),
-                "company":     (current.get("companyInfo") or {}).get("name"),
-                "work_email":  _best_email(positions),
+                "id":           person.get("id"),
+                "full_name":    name.get("fullName"),
+                "first_name":   name.get("first"),
+                "last_name":    name.get("last"),
+                "title":        current.get("title"),
+                "seniority":    current.get("seniority"),
+                "function":     current.get("function"),
+                "company":      (current.get("companyInfo") or {}).get("name"),
+                "work_email":   _best_email(positions),
                 "direct_phone": _best_phone(person.get("personalPhones")),
+                "linkedin_url": linkedin.get("linkedinUrl"),
             }
             enriched.append(profile)
 
@@ -375,9 +386,12 @@ def add_prospects(list_id, profiles):
 
         body = {"firstName": first, "lastName": last}
         if profile.get("title"):        body["title"]       = profile["title"]
+        if profile.get("seniority"):    body["seniority"]   = profile["seniority"]
+        if profile.get("function"):     body["function"]    = profile["function"]
         if profile.get("company"):      body["company"]     = profile["company"]
         if profile.get("work_email"):   body["workEmail"]   = profile["work_email"]
         if profile.get("direct_phone"): body["mobilePhone"] = profile["direct_phone"]
+        if profile.get("linkedin_url"): body["linkedinUrl"] = profile["linkedin_url"]
 
         try:
             response = requests.post(
@@ -413,7 +427,9 @@ def add_prospects(list_id, profiles):
 
 # ── Step 5 — Export to CSV ─────────────────────────────────────────────────────
 
-def fetch_and_export(list_id):
+def fetch_and_export(list_id, profiles):
+    profile_by_email = {p["work_email"]: p for p in profiles if p.get("work_email")}
+
     # GET /v1/lists/{listId}/prospects — fetch all prospects from the list.
     # GET is the REST way of reading data without changing anything.
     #
@@ -456,16 +472,21 @@ def fetch_and_export(list_id):
         print(f"  Page {page}: {len(items)} prospects")
 
         for p in items:
-            loc     = p.get("location") or {}
-            company = p.get("company")  or {}
+            loc      = p.get("location") or {}
+            company  = p.get("company")  or {}
+            enriched = profile_by_email.get(p.get("workEmail") or "")
             all_rows.append({
                 "id":                p.get("id"),
                 "name":              p.get("name"),
                 "first_name":        p.get("firstName"),
                 "last_name":         p.get("lastName"),
                 "title":             p.get("title"),
+                "seniority":         enriched.get("seniority")    if enriched else None,
+                "function":          enriched.get("function")     if enriched else None,
                 "work_email":        p.get("workEmail"),
                 "email_status":      p.get("emailStatus"),
+                "direct_phone":      enriched.get("direct_phone") if enriched else None,
+                "linkedin_url":      enriched.get("linkedin_url") if enriched else None,
                 "location_city":     loc.get("city"),
                 "location_state":    loc.get("state"),
                 "location_country":  loc.get("country"),
@@ -512,7 +533,7 @@ def main():
     profiles = enrich_profiles(ids)
     list_id  = create_list()
     add_prospects(list_id, profiles)
-    fetch_and_export(list_id)
+    fetch_and_export(list_id, profiles)
 
     print()
     print("Done.")
