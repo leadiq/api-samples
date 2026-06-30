@@ -13,6 +13,7 @@
     "04": "tsx rest/04_create_prospector_list.ts",
     "05": "tsx rest/05_add_prospects_to_list.ts",
     "06": "tsx rest/06_export_list_to_csv.ts",
+    "07": "tsx graphql/07_find_job_changes.ts",
     "start": "tsx full_pipeline.ts",
     "typecheck": "tsc --noEmit"
   },

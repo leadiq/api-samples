@@ -25,6 +25,7 @@ The scripts are numbered and build on each other. Run them in order, or use `ful
 | 01 | `check_usage` | Verify your API key and view your credit balance | None |
 | 02 | `advanced_search` | Search for people by role, seniority, and location — saves their IDs | 1 per page |
 | 03 | `enrich_profiles` | Enrich each person with their work email and direct phone | 1 per person |
+| 07 | `find_job_changes` | Find people who recently changed jobs or were promoted — prints the previous → current transition (standalone, not part of the pipeline) | 1 per page |
 
 ### Prospector REST API (`rest/`)
 

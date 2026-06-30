@@ -71,6 +71,9 @@ The individual scripts below are numbered and build on each other. Run them in o
 | `graphql/01_check_usage.sh` | Verifies your API key and displays your current credit usage | None |
 | `graphql/02_advanced_search.sh` | Finds people by role, seniority, and location — saves their IDs to `output/advanced_search_ids.txt` | 1 per page of results |
 | `graphql/03_enrich_profiles.sh` | Reads IDs from `output/advanced_search_ids.txt` and enriches each person with their work email and direct phone — saves results to `output/enriched_profiles.txt` | 1 Enrich credit per person |
+| `graphql/07_find_job_changes.sh` | Finds people who recently changed jobs or were promoted, and prints the previous → current transition — saves results to `output/job_changes.txt` | 1 per page of results |
+
+> `07_find_job_changes.sh` is a standalone alternative to `02` (not part of the numbered pipeline). It uses the same `flatAdvancedSearch` query, scoped with the job-change filters.
 
 Expected output for `01_check_usage.sh`:
 
@@ -172,6 +175,34 @@ Fetching page 1... 10 prospects
 
 Total   : 10 prospects retrieved
 Saved to: output/prospects.csv
+```
+
+Expected output for `07_find_job_changes.sh`:
+
+```
+Searching LeadIQ for recent job changes...
+  Change type      : JobChange
+  Current role     : Sales
+  Current seniority: VP
+  Current industry : Computer Software
+  Changed since    : 2026-04-01
+
+Found 10 job changes. Fetching up to 10 (25 per page)...
+
+1. Erin Walker  [JobChange · ---]
+     from: Global Vice President, Direct Sales @ Lytx, Inc.
+       to: Vice President, North America Sales @ MANTIS
+     https://www.linkedin.com/in/erin-walker-a6b6a06
+
+2. Vladislav Simeonov  [JobChange · ---]
+     from: VP Sales, EMEA @ Press Ganey Forsta
+       to: Vp, Sales @ Qualtrics
+     https://www.linkedin.com/in/vladislav-simeonov-630b37b6
+
+...
+
+Total: 10 job changes retrieved.
+Saved to output/job_changes.txt
 ```
 
 ---
