@@ -76,6 +76,8 @@ docker compose run --rm leadiq-python python graphql/03_enrich_profiles.py
 docker compose run --rm leadiq-python python rest/04_create_prospector_list.py
 docker compose run --rm leadiq-python python rest/05_add_prospects_to_list.py
 docker compose run --rm leadiq-python python rest/06_export_list_to_csv.py
+docker compose run --rm leadiq-python python rest/08_verify_email.py
+docker compose run --rm leadiq-python python rest/09_verify_prospect_emails.py
 ```
 
 ### TypeScript — Full pipeline (single command)
@@ -98,6 +100,8 @@ docker compose run --rm leadiq-ts npx ts-node graphql/03_enrich_profiles.ts
 docker compose run --rm leadiq-ts npx ts-node rest/04_create_prospector_list.ts
 docker compose run --rm leadiq-ts npx ts-node rest/05_add_prospects_to_list.ts
 docker compose run --rm leadiq-ts npx ts-node rest/06_export_list_to_csv.ts
+docker compose run --rm leadiq-ts npx ts-node rest/08_verify_email.ts
+docker compose run --rm leadiq-ts npx ts-node rest/09_verify_prospect_emails.ts
 ```
 
 ### Bash — Full pipeline (single command)
@@ -120,6 +124,8 @@ docker compose run --rm leadiq-bash bash graphql/03_enrich_profiles.sh
 docker compose run --rm leadiq-bash bash rest/04_create_prospector_list.sh
 docker compose run --rm leadiq-bash bash rest/05_add_prospects_to_list.sh
 docker compose run --rm leadiq-bash bash rest/06_export_list_to_csv.sh
+docker compose run --rm leadiq-bash bash rest/08_verify_email.sh
+docker compose run --rm leadiq-bash bash rest/09_verify_prospect_emails.sh
 ```
 
 ---

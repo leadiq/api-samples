@@ -138,6 +138,12 @@ The REST API endpoint is `https://prospector.leadiq.com`. It manages Prospector 
 | `rest/04_create_prospector_list.sh` | Creates a list named "Sales Leaders in New Hampshire" in the Prospector — saves the list ID to `output/prospector_list_id.txt` | None |
 | `rest/05_add_prospects_to_list.sh` | Reads `output/enriched_profiles.txt` and adds each person to the list as a prospect | None |
 | `rest/06_export_list_to_csv.sh` | Fetches all prospects from the list and saves them to `output/prospects.csv` — ready to open in Excel or Google Sheets | None |
+| `rest/08_verify_email.sh` | Checks whether one or more email addresses are deliverable, without saving anything — saves the verdicts to `output/verified_emails.txt` | 0.1 per email |
+| `rest/09_verify_prospect_emails.sh` | Reads `output/prospects.csv` and re-verifies the work email stored on each prospect — the new status is saved on the prospect in LeadIQ, and the results to `output/verified_prospects.txt` | 0.1 per prospect |
+
+> `08_verify_email.sh` is standalone — edit `EMAILS_TO_VERIFY` in the script, or pass addresses on the command line: `bash rest/08_verify_email.sh jane@acme.com`.
+>
+> `09_verify_prospect_emails.sh` runs after `06` and verifies up to `MAX_PROSPECTS` (10) prospects; prospects without an email are skipped. You can also pass prospect IDs directly: `bash rest/09_verify_prospect_emails.sh 6627e3f1a2b3c4d5e6f70001`.
 
 Expected output for `04_create_prospector_list.sh`:
 
@@ -203,6 +209,35 @@ Found 10 job changes. Fetching up to 10 (25 per page)...
 
 Total: 10 job changes retrieved.
 Saved to output/job_changes.txt
+```
+
+Expected output for `08_verify_email.sh`:
+
+```
+Emails      : 2
+Max credits : 0.2
+
+[1/2] jane.smith@acme.com ... Verified
+[2/2] old.address@example.com ... Invalid
+
+Checked  : 2
+Skipped  : 0
+Saved to : output/verified_emails.txt
+```
+
+Expected output for `09_verify_prospect_emails.sh`:
+
+```
+Prospects   : 10 (MAX_PROSPECTS=10)
+Max credits : 1.0
+
+[1/10] Jane Smith ... jane.smith@acme.com  Unverified → Verified
+[2/10] John Doe ... john.doe@example.com  VerifiedLikely → VerifiedLikely
+...
+
+Verified : 10
+Skipped  : 0
+Saved to : output/verified_prospects.txt
 ```
 
 ---
