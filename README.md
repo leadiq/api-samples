@@ -34,6 +34,8 @@ The scripts are numbered and build on each other. Run them in order, or use `ful
 | 04 | `create_prospector_list` | Create a Prospector list named "Sales Leaders in New Hampshire" | None |
 | 05 | `add_prospects_to_list` | Add the enriched profiles to the list as prospects | None |
 | 06 | `export_list_to_csv` | Fetch all prospects from the list and save to `output/prospects.csv` | None |
+| 08 | `verify_email` | Check whether any email address is deliverable, without saving anything (standalone, not part of the pipeline) | 0.1 per email |
+| 09 | `verify_prospect_emails` | Re-verify the work email stored on each saved prospect and update its status in LeadIQ (not part of the pipeline) | 0.1 per prospect |
 
 ### Full pipeline
 
@@ -55,7 +57,7 @@ All samples authenticate with a **Secret Base64 API key**. Find yours in LeadIQ 
 ## API overview
 
 - **GraphQL API** — `https://api.leadiq.com/graphql` — used by samples 01–03
-- **Prospector REST API** — `https://prospector.leadiq.com` — used by samples 04–06
+- **Prospector REST API** — `https://prospector.leadiq.com` — used by samples 04–06, 08 and 09
 
 ---
 

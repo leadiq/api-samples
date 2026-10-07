@@ -221,6 +221,12 @@ The REST API endpoint is `https://prospector.leadiq.com`. It manages Prospector 
 | `rest/04_create_prospector_list.py` | Creates a list named "Sales Leaders in New Hampshire" in the Prospector — saves the list details to `output/prospector_list.json` | None |
 | `rest/05_add_prospects_to_list.py` | Reads `output/enriched_profiles.json` and adds each person to the list as a prospect — saves results to `output/added_prospects.json` | None |
 | `rest/06_export_list_to_csv.py` | Fetches all prospects from the list and saves them to `output/prospects.csv` — ready to open in Excel or Google Sheets | None |
+| `rest/08_verify_email.py` | Checks whether one or more email addresses are deliverable, without saving anything — saves the verdicts to `output/verified_emails.json` | 0.1 per email |
+| `rest/09_verify_prospect_emails.py` | Reads `output/added_prospects.json` and re-verifies the work email stored on each prospect — the new status is saved on the prospect in LeadIQ, and the results to `output/verified_prospects.json` | 0.1 per prospect |
+
+> `08_verify_email.py` is standalone — edit `EMAILS_TO_VERIFY` in the script, or pass addresses on the command line: `python rest/08_verify_email.py jane@acme.com`.
+>
+> `09_verify_prospect_emails.py` runs after `05` and verifies up to `MAX_PROSPECTS` (10) prospects; prospects without an email are skipped. You can also pass prospect IDs directly: `python rest/09_verify_prospect_emails.py 6627e3f1a2b3c4d5e6f70001`.
 
 Expected output for `04_create_prospector_list.py`:
 
@@ -290,6 +296,38 @@ Found 10 job changes. Fetching up to 10 (25 per page)...
 
 Total: 10 job changes retrieved.
 Saved to output/job_changes.json
+```
+
+Expected output for `08_verify_email.py`:
+
+```
+Emails     : 2
+Max credits: 0.2
+
+[1/2] jane.smith@acme.com ... Verified
+[2/2] old.address@example.com ... Invalid
+
+Verified       : 1
+VerifiedLikely : 0
+Unverified     : 0
+Invalid        : 1
+Skipped        : 0
+Saved to       : output/verified_emails.json
+```
+
+Expected output for `09_verify_prospect_emails.py`:
+
+```
+Prospects  : 10 (MAX_PROSPECTS=10)
+Max credits: 1.0
+
+[1/10] Jane Smith ... jane.smith@acme.com  Unverified → Verified
+[2/10] John Doe ... john.doe@example.com  VerifiedLikely → VerifiedLikely
+...
+
+Verified : 10
+Skipped  : 0
+Saved to : output/verified_prospects.json
 ```
 
 ---
