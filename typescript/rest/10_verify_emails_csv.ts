@@ -523,18 +523,7 @@ async function main(): Promise<void> {
   console.log(`Est. time      : ~${(todo.length / perMinute / 60).toFixed(1)} h at ${perMinute} requests/min`);
   console.log();
 
-  // The errors file is rewritten on every run: it lists what is still left to
-  // retry, not the history of everything that ever failed.
-  const errors = new CsvAppender(errorsPath, ["email", "error"], "w");
-  for (const email of malformed) errors.write([email, email ? "malformed email" : "blank email"]);
-
-  if (todo.length === 0) {
-    errors.close();
-    console.log("Nothing left to check.");
-    return;
-  }
-
-  if (!args.yes) {
+  if (todo.length > 0 && !args.yes) {
     if (!process.stdin.isTTY) {
       console.error("Refusing to spend credits without confirmation — pass --yes to run unattended.");
       process.exit(EXIT_NEEDS_FIX);
@@ -546,6 +535,18 @@ async function main(): Promise<void> {
       console.log("Cancelled.");
       return;
     }
+  }
+
+  // The errors file is rewritten on every run: it lists what is still left to
+  // retry, not the history of everything that ever failed. (Only once the run
+  // is confirmed — a cancelled run must not lose that list.)
+  const errors = new CsvAppender(errorsPath, ["email", "error"], "w");
+  for (const email of malformed) errors.write([email, email ? "malformed email" : "blank email"]);
+
+  if (todo.length === 0) {
+    errors.close();
+    console.log("Nothing left to check.");
+    return;
   }
 
   const results = new CsvAppender(resultsPath, ["email", "status"], "a");

@@ -316,19 +316,7 @@ echo "Max credits    : $credits"
 echo "Est. time      : ~$(awk "BEGIN { printf \"%.1f\", $to_check / $PER_MINUTE / 60 }") h at $PER_MINUTE requests/min"
 echo ""
 
-# The errors file is rewritten on every run: it lists what is still left to
-# retry, not the history of everything that ever failed.
-echo "email,error" > "$ERRORS"
-while IFS= read -r email; do
-  if [[ -z "$email" ]]; then echo ",blank email"; else echo "$email,malformed email"; fi
-done < "$MALFORMED" >> "$ERRORS"
-
-if [[ "$to_check" -eq 0 ]]; then
-  echo "Nothing left to check."
-  exit 0
-fi
-
-if [[ $YES -eq 0 ]]; then
+if [[ "$to_check" -gt 0 && $YES -eq 0 ]]; then
   if [[ ! -t 0 ]]; then
     echo "Refusing to spend credits without confirmation — pass --yes to run unattended."
     exit $EXIT_NEEDS_FIX
@@ -338,6 +326,19 @@ if [[ $YES -eq 0 ]]; then
     echo "Cancelled."
     exit 0
   fi
+fi
+
+# The errors file is rewritten on every run: it lists what is still left to
+# retry, not the history of everything that ever failed.  (Only once the run
+# is confirmed — a cancelled run must not lose that list.)
+echo "email,error" > "$ERRORS"
+while IFS= read -r email; do
+  if [[ -z "$email" ]]; then echo ",blank email"; else echo "$email,malformed email"; fi
+done < "$MALFORMED" >> "$ERRORS"
+
+if [[ "$to_check" -eq 0 ]]; then
+  echo "Nothing left to check."
+  exit 0
 fi
 
 # ── Worker ────────────────────────────────────────────────────────────────────

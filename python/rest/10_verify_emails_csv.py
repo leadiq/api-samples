@@ -466,8 +466,18 @@ def main():
     print(f"Est. time      : ~{est_hours:.1f} h at {args.per_minute} requests/min")
     print()
 
+    if todo and not args.yes:
+        if not sys.stdin.isatty():
+            print("Refusing to spend credits without confirmation — pass --yes to run unattended.")
+            sys.exit(EXIT_NEEDS_FIX)
+        answer = input(f"Spend up to {len(todo) * 0.1:,.1f} credits? [y/N] ").strip().lower()
+        if answer != "y":
+            print("Cancelled.")
+            sys.exit(0)
+
     # The errors file is rewritten on every run: it lists what is still left
-    # to retry, not the history of everything that ever failed.
+    # to retry, not the history of everything that ever failed.  (Only once
+    # the run is confirmed — a cancelled run must not lose that list.)
     errors = CsvAppender(errors_path, ["email", "error"], "w")
     for email in malformed:
         errors.write([email, "malformed email" if email else "blank email"])
@@ -476,15 +486,6 @@ def main():
         errors.close()
         print("Nothing left to check.")
         return
-
-    if not args.yes:
-        if not sys.stdin.isatty():
-            print("Refusing to spend credits without confirmation — pass --yes to run unattended.")
-            sys.exit(EXIT_NEEDS_FIX)
-        answer = input(f"Spend up to {len(todo) * 0.1:,.1f} credits? [y/N] ").strip().lower()
-        if answer != "y":
-            print("Cancelled.")
-            sys.exit(0)
 
     results = CsvAppender(results_path, ["email", "status"], "a")
 
