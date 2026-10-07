@@ -155,8 +155,8 @@ def main():
     print(f"Max credits: {total * 0.1:.1f}")
     print()
 
-    verified = []   # prospects whose email was verified, with the new verdict
-    skipped  = []   # prospects that could not be verified, with the reason why
+    checked = []   # prospects whose email was checked, with the new verdict
+    skipped = []   # prospects that could not be checked, with the reason why
 
     for i, prospect in enumerate(prospects, start=1):
         name = prospect.get("name") or prospect["id"]
@@ -172,20 +172,25 @@ def main():
             updated = result["prospect"]
             before  = prospect.get("emailStatus") or "—"
             print(f"{updated.get('workEmail')}  {before} → {result['status']}")
-            verified.append({"status": result["status"], "prospect": updated})
+            checked.append({"status": result["status"], "prospect": updated})
 
         # Wait a moment before the next call to stay within rate limits.
         if i < total:
             time.sleep(DELAY_BETWEEN_CALLS)
 
+    # Count how many prospects landed in each verdict bucket.  "Verified" here
+    # is the verdict, not the number of calls made — a prospect that was
+    # checked and came back Invalid is counted under Invalid.
     print()
-    print(f"Verified : {len(verified)}")
-    print(f"Skipped  : {len(skipped)}")
+    for status in ("Verified", "VerifiedLikely", "Unverified", "Invalid"):
+        count = sum(1 for c in checked if c["status"] == status)
+        print(f"{status:<15}: {count}")
+    print(f"{'Skipped':<15}: {len(skipped)}")
 
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:
-        json.dump(verified, f, indent=2)
-    print(f"Saved to : {OUTPUT_PATH}")
+        json.dump(checked, f, indent=2)
+    print(f"{'Saved to':<15}: {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
