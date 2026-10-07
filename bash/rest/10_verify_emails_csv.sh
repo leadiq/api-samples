@@ -85,10 +85,14 @@ REQUEST_TIMEOUT_SECONDS=60
 MAX_RETRIES=5
 FIRST_BACKOFF_SECONDS=2
 
-# If this many addresses in a row fail even after their retries, the API (or
-# your network) is down.  Stop instead of marking every remaining address as
-# an error — the run can be resumed once things are back.
+# If this many addresses in a row fail even after their retries, AND the API
+# has not answered any address for OUTAGE_AFTER_SECONDS, the API (or your
+# network) is down.  Stop instead of marking every remaining address as an
+# error — the run can be resumed once things are back.  (Both conditions are
+# needed: a handful of addresses can fail on their own — some mail servers
+# never answer the verifier — without anything being down.)
 MAX_FAILURES_IN_A_ROW=10
+OUTAGE_AFTER_SECONDS=300
 
 # How often to print a progress line (and ask the OS to write everything to
 # the physical disk, so results survive even a power cut), in seconds.
@@ -167,6 +171,7 @@ ERRORS="$OUTPUT_DIR/${name}_errors.csv"
 #   pause_until     a 429 asked everyone to wait until this time (epoch secs)
 #   throttled       one line per 429 response, for the progress line
 #   failures        one line per address that failed in a row
+#   last_answer     when the API last answered any address (epoch secs)
 STATE=$(mktemp -d)
 chmod 700 "$STATE"
 
@@ -195,6 +200,7 @@ trap cleanup EXIT
 printf 'X-API-Key: %s\n' "$PROSPECTOR_KEY" > "$STATE/headers"
 : > "$STATE/failures"
 : > "$STATE/throttled"
+date +%s > "$STATE/last_answer"
 
 # ── Read the CSV ──────────────────────────────────────────────────────────────
 
@@ -266,31 +272,45 @@ fi
 #    "jane@acme.com" are checked (and charged) once.
 #  • A results row only counts as done if its status is one of the four
 #    verdicts — a half-written line from a killed run is checked again.
+#  • Addresses in the previous run's errors file are checked LAST: an address
+#    that failed before often fails again, slowly, and if a few of them came
+#    first they could keep every worker busy while thousands of healthy
+#    addresses wait.
 TODO="$STATE/todo"
+RETRY="$STATE/retry"
 MALFORMED="$STATE/malformed"
-summary=$(LC_ALL=C awk -F, -v shape="$EMAIL_SHAPE" -v todo="$TODO" -v bad="$MALFORMED" '
-  FILENAME != ARGV[2] {
+PREVIOUS_ERRORS="$ERRORS"
+[[ -f "$PREVIOUS_ERRORS" ]] || PREVIOUS_ERRORS=/dev/null
+summary=$(LC_ALL=C awk -F, -v shape="$EMAIL_SHAPE" -v todo="$TODO" -v retry="$RETRY" -v bad="$MALFORMED" '
+  FILENAME == ARGV[1] {   # the results file
     if (FNR > 1 && $2 ~ /^(Verified|VerifiedLikely|Unverified|Invalid)$/) done[tolower($1)] = 1
+    next
+  }
+  FILENAME == ARGV[2] {   # the previous errors file (or /dev/null if there is none)
+    if (FNR > 1 && $1 != "") failed[tolower($1)] = 1
     next
   }
   {
     key = tolower($0)
     if (key in seen) next
     seen[key] = 1; unique++
-    if (key in done)      already++
-    else if ($0 ~ shape)  { print > todo;  check++ }
-    else                  { print > bad;   malformed++ }
+    if (key in done)        already++
+    else if ($0 !~ shape)   { print > bad;   malformed++ }
+    else if (key in failed) { print > retry; check++; retried++ }
+    else                    { print > todo;  check++ }
   }
-  END { printf "%d %d %d %d", unique, already, malformed, check }
-' "$RESULTS" "$ALL")
-read -r unique already malformed to_check <<< "$summary"
-touch "$TODO" "$MALFORMED"
+  END { printf "%d %d %d %d %d", unique, already, malformed, check, retried }
+' "$RESULTS" "$PREVIOUS_ERRORS" "$ALL")
+read -r unique already malformed to_check retried <<< "$summary"
+touch "$TODO" "$RETRY" "$MALFORMED"
+cat "$RETRY" >> "$TODO"
 
 credits=$(awk "BEGIN { printf \"%.1f\", $to_check * 0.1 }")
 echo "Input          : $INPUT ($rows rows)"
 echo "Unique emails  : $unique"
 echo "Already done   : $already (in $RESULTS)"
 echo "Malformed      : $malformed (skipped, no credit used)"
+[[ "$retried" -gt 0 ]] && echo "Retried last   : $retried (could not be checked in an earlier run)"
 echo "To check       : $to_check"
 echo "Max credits    : $credits"
 echo "Est. time      : ~$(awk "BEGIN { printf \"%.1f\", $to_check / $PER_MINUTE / 60 }") h at $PER_MINUTE requests/min"
@@ -339,6 +359,13 @@ sleep_unless_stopped() {
   return 0
 }
 
+# The API answered this address (whatever the answer): reset the run of
+# failures and note the time, for the outage check.
+answered() {
+  : > "$STATE/failures"
+  date +%s > "$STATE/last_answer"
+}
+
 # Write one line to a file shared by all workers.  A single short append is
 # one write to the OS, so lines from different workers never get mixed up —
 # and once written, the line survives this script being killed.
@@ -384,11 +411,11 @@ verify_one() {
         else
           append "$ERRORS" "$email,unexpected response"
         fi
-        : > "$STATE/failures"
+        answered
         return ;;
       400)
         append "$ERRORS" "$email,malformed email"
-        : > "$STATE/failures"
+        answered
         return ;;
       401) echo "Invalid API key — check LEADIQ_API_KEY." > "$STATE/fatal"; touch "$STATE/stop"; return ;;
       402) echo "Out of credits (402)." > "$STATE/fatal"; touch "$STATE/stop"; return ;;
@@ -406,7 +433,7 @@ verify_one() {
         reason="server error ($code)" ;;
       *)
         append "$ERRORS" "$email,error $code"
-        : > "$STATE/failures"
+        answered
         return ;;
     esac
 
@@ -524,12 +551,14 @@ next_report=$((SECONDS + PROGRESS_EVERY_SECONDS))
 pace_start=$SECONDS
 launched=0
 
-# Stop if too many addresses in a row failed after all their retries.
+# Stop if too many addresses in a row failed after all their retries and the
+# API has not answered anything for OUTAGE_AFTER_SECONDS.
 check_outage() {
-  local n
+  local n last
   n=$(wc -l < "$STATE/failures" | tr -d ' ')
-  if [[ ${n:-0} -ge $MAX_FAILURES_IN_A_ROW ]]; then
-    echo "$MAX_FAILURES_IN_A_ROW addresses in a row failed after retries — the API or your network looks down." > "$STATE/outage"
+  last=$(cat "$STATE/last_answer" 2>/dev/null)
+  if [[ ${n:-0} -ge $MAX_FAILURES_IN_A_ROW && $(( $(date +%s) - ${last:-0} )) -ge $OUTAGE_AFTER_SECONDS ]]; then
+    echo "$n addresses in a row failed after retries and no answer for $((OUTAGE_AFTER_SECONDS / 60)) minutes — the API or your network looks down." > "$STATE/outage"
     touch "$STATE/stop"
   fi
 }

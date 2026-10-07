@@ -328,7 +328,7 @@ npm run 10 -- contacts.csv
 - **Output** — `output/contacts_results.csv` (`email,status`) and `output/contacts_errors.csv` (`email,error`) for addresses that could not be checked.
 - **Cost** — 0.1 credit per *unique* address. Duplicates (compared case-insensitively) are checked once, and blank or obviously malformed cells are skipped without calling the API. The script prints the maximum cost and asks before starting; pass `--yes` to skip the question in unattended runs.
 - **Speed** — set `--per-minute` to your API key's rate limit (default 60, the standard Prospector API limit; every API response states it in its `ratelimit-policy` header). At 60 per minute, 100,000 addresses take about 28 hours; at 300 per minute, about 5.5 hours. Several requests run at once (`--workers`, default 10) so slow checks don't hold up the queue — you need roughly *per-minute ÷ 60 × seconds per check* workers to reach the cap. The progress line counts `429s`: a steady stream of them means `--per-minute` is higher than your key allows.
-- **Errors** — rate limits (429), server errors (5xx), timeouts and connection drops are retried up to 5 times with a growing pause. After a 429, every request waits until the API's rate-limit window resets (from its `Retry-After` or `ratelimit` header). Addresses that still fail go to the errors file; running the command again retries them.
+- **Errors** — rate limits (429), server errors (5xx), timeouts and connection drops are retried up to 5 times with a growing pause. After a 429, every request waits until the API's rate-limit window resets (from its `Retry-After` or `ratelimit` header). Addresses that still fail go to the errors file; running the command again retries them — after every other address, so a few addresses whose mail servers never answer can't hold up the rest.
 
 ### If the run is interrupted
 
@@ -338,7 +338,7 @@ Every verdict is written to the results file the moment it arrives, so a stopped
 |---|---|
 | Ctrl+C, `kill`, or the terminal window closed | Stops starting new requests, waits for the ones in flight so their answers are saved, then exits. Press Ctrl+C a second time to quit immediately. |
 | The process was killed outright (`kill -9`, crash, power cut) | Everything already written is kept. A half-written last line is detected and that address is checked again. |
-| The API or your network went down | After 10 addresses in a row fail, the run stops instead of filling the errors file. |
+| The API or your network went down | Once 10 addresses in a row have failed and the API hasn't answered anything for 5 minutes, the run stops instead of filling the errors file. |
 | Out of credits (402) or invalid key (401) | Stops at once; results so far are kept. |
 | You start a second run on the same file while one is going | The second run refuses to start, so no address is paid for twice. A lock left behind by a killed run is detected and taken over automatically. |
 

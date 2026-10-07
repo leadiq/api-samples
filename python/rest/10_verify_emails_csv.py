@@ -111,10 +111,14 @@ REQUEST_TIMEOUT_SECONDS = 60
 MAX_RETRIES = 5
 FIRST_BACKOFF_SECONDS = 2
 
-# If this many addresses in a row fail even after their retries, the API (or
-# your network) is down.  Stop instead of marking every remaining address as
-# an error — the run can be resumed once things are back.
+# If this many addresses in a row fail even after their retries, AND the API
+# has not answered any address for OUTAGE_AFTER_SECONDS, the API (or your
+# network) is down.  Stop instead of marking every remaining address as an
+# error — the run can be resumed once things are back.  (Both conditions are
+# needed: a handful of addresses can fail on their own — some mail servers
+# never answer the verifier — without anything being down.)
 MAX_FAILURES_IN_A_ROW = 10
+OUTAGE_AFTER_SECONDS = 300
 
 # How often to print a progress line, and how often to force the results to
 # the physical disk (so they survive even a power cut), in seconds.
@@ -307,6 +311,17 @@ def read_done(results_path):
         }
 
 
+def read_failed(errors_path):
+    # Addresses the previous run could not check (its errors file).  They are
+    # retried at the END of this run: an address that failed before often
+    # fails again, slowly, and if a few of them came first they could keep
+    # every worker busy while thousands of healthy addresses wait.
+    if not os.path.exists(errors_path):
+        return set()
+    with open(errors_path, newline="", encoding="utf-8") as f:
+        return {row["email"].strip().lower() for row in csv.DictReader(f) if row.get("email")}
+
+
 class CsvAppender:
     # A CSV file several threads can append to.  Every row is handed to the
     # operating system as soon as it is written, so it survives this program
@@ -430,16 +445,21 @@ def main():
 
     emails, rows, column = read_emails(args.input_csv, args.column)
     done = read_done(results_path)
+    failed_before = read_failed(errors_path)
 
     # Split the unique addresses into: already done, malformed, and to check.
     todo      = [e for e in emails if e.lower() not in done]
     malformed = [e for e in todo if not EMAIL_SHAPE.match(e)]
     todo      = [e for e in todo if EMAIL_SHAPE.match(e)]
+    retry     = [e for e in todo if e.lower() in failed_before]
+    todo      = [e for e in todo if e.lower() not in failed_before] + retry
 
     print(f"Input          : {args.input_csv} ({rows:,} rows, column '{column}')")
     print(f"Unique emails  : {len(emails):,}")
     print(f"Already done   : {len(emails) - len(todo) - len(malformed):,} (in {results_path})")
     print(f"Malformed      : {len(malformed):,} (skipped, no credit used)")
+    if retry:
+        print(f"Retried last   : {len(retry):,} (could not be checked in an earlier run)")
     print(f"To check       : {len(todo):,}")
     print(f"Max credits    : {len(todo) * 0.1:,.1f}")
     est_hours = len(todo) / args.per_minute / 60
@@ -483,6 +503,7 @@ def main():
     counts["errors"] = 0
     lock = threading.Lock()   # guards counts, failures_in_a_row and stopped_by
     failures_in_a_row = 0
+    last_answer = time.monotonic()   # when the API last gave any address an answer
     stopped_by = None         # (kind, message) — the first reason the run stopped
 
     def stop_run(kind, message=None):
@@ -493,7 +514,7 @@ def main():
         stop.set()
 
     def worker():
-        nonlocal failures_in_a_row
+        nonlocal failures_in_a_row, last_answer
         while not stop.is_set():
             try:
                 email = work.get_nowait()
@@ -514,11 +535,17 @@ def main():
 
             with lock:
                 counts[detail if outcome == "verdict" else "errors"] += 1
-                failures_in_a_row = failures_in_a_row + 1 if outcome == "failed" else 0
-                outage = failures_in_a_row >= MAX_FAILURES_IN_A_ROW
+                if outcome == "failed":
+                    failures_in_a_row += 1
+                else:
+                    failures_in_a_row = 0
+                    last_answer = time.monotonic()
+                outage = (failures_in_a_row >= MAX_FAILURES_IN_A_ROW
+                          and time.monotonic() - last_answer >= OUTAGE_AFTER_SECONDS)
             if outage:
-                stop_run("outage", f"{MAX_FAILURES_IN_A_ROW} addresses in a row failed after "
-                                   f"retries (last: {detail}) — the API or your network looks down.")
+                stop_run("outage", f"{failures_in_a_row} addresses in a row failed after retries and "
+                                   f"no answer for {OUTAGE_AFTER_SECONDS // 60} minutes "
+                                   f"(last: {detail}) — the API or your network looks down.")
 
     # Ctrl+C (SIGINT), `kill` (SIGTERM) and a closed terminal window (SIGHUP)
     # all take the same careful shutdown path below.  SIGINT is set up here

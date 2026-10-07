@@ -92,10 +92,14 @@ const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_RETRIES = 5;
 const FIRST_BACKOFF_MS = 2000;
 
-// If this many addresses in a row fail even after their retries, the API (or
-// your network) is down. Stop instead of marking every remaining address as
-// an error — the run can be resumed once things are back.
+// If this many addresses in a row fail even after their retries, AND the API
+// has not answered any address for OUTAGE_AFTER_MS, the API (or your network)
+// is down. Stop instead of marking every remaining address as an error — the
+// run can be resumed once things are back. (Both conditions are needed: a
+// handful of addresses can fail on their own — some mail servers never
+// answer the verifier — without anything being down.)
 const MAX_FAILURES_IN_A_ROW = 10;
+const OUTAGE_AFTER_MS = 300_000;
 
 // How often to print a progress line, and how often to force the results to
 // the physical disk (so they survive even a power cut).
@@ -354,6 +358,16 @@ function readEmails(file: string, column: string | undefined) {
 // counts if its status is one of the four verdicts — if a previous run was
 // killed halfway through writing a line, that cut-off line is ignored and the
 // address is simply checked again.
+// Addresses the previous run could not check (its errors file). They are
+// retried at the END of this run: an address that failed before often fails
+// again, slowly, and if a few of them came first they could keep every worker
+// busy while thousands of healthy addresses wait.
+function readFailed(errorsPath: string): Set<string> {
+  if (!fs.existsSync(errorsPath)) return new Set();
+  const [, ...rows] = parseCsv(fs.readFileSync(errorsPath, "utf-8"));
+  return new Set(rows.filter(([email]) => email).map(([email]) => email.trim().toLowerCase()));
+}
+
 function readDone(resultsPath: string): Set<string> {
   if (!fs.existsSync(resultsPath)) return new Set();
   const [, ...rows] = parseCsv(fs.readFileSync(resultsPath, "utf-8"));
@@ -488,11 +502,14 @@ async function main(): Promise<void> {
 
   const { emails, rows, column } = readEmails(input, args.column);
   const done = readDone(resultsPath);
+  const failedBefore = readFailed(errorsPath);
 
   // Split the unique addresses into: already done, malformed, and to check.
   const notDone = emails.filter((e) => !done.has(e.toLowerCase()));
   const malformed = notDone.filter((e) => !EMAIL_SHAPE.test(e));
-  const todo = notDone.filter((e) => EMAIL_SHAPE.test(e));
+  const valid = notDone.filter((e) => EMAIL_SHAPE.test(e));
+  const retry = valid.filter((e) => failedBefore.has(e.toLowerCase()));
+  const todo = [...valid.filter((e) => !failedBefore.has(e.toLowerCase())), ...retry];
 
   const n = (x: number) => x.toLocaleString("en-US");
   const maxCredits = (todo.length * 0.1).toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -500,6 +517,7 @@ async function main(): Promise<void> {
   console.log(`Unique emails  : ${n(emails.length)}`);
   console.log(`Already done   : ${n(emails.length - notDone.length)} (in ${resultsPath})`);
   console.log(`Malformed      : ${n(malformed.length)} (skipped, no credit used)`);
+  if (retry.length) console.log(`Retried last   : ${n(retry.length)} (could not be checked in an earlier run)`);
   console.log(`To check       : ${n(todo.length)}`);
   console.log(`Max credits    : ${maxCredits}`);
   console.log(`Est. time      : ~${(todo.length / perMinute / 60).toFixed(1)} h at ${perMinute} requests/min`);
@@ -548,6 +566,7 @@ async function main(): Promise<void> {
   };
   let next = 0;
   let failuresInARow = 0;
+  let lastAnswer = Date.now(); // when the API last gave any address an answer
 
   async function worker(): Promise<void> {
     while (!stopSignal.aborted && next < todo.length) {
@@ -571,11 +590,12 @@ async function main(): Promise<void> {
 
       if (outcome.kind !== "failed") {
         failuresInARow = 0;
-      } else if (++failuresInARow >= MAX_FAILURES_IN_A_ROW) {
+        lastAnswer = Date.now();
+      } else if (++failuresInARow >= MAX_FAILURES_IN_A_ROW && Date.now() - lastAnswer >= OUTAGE_AFTER_MS) {
         stopRun(
           "outage",
-          `${MAX_FAILURES_IN_A_ROW} addresses in a row failed after retries ` +
-            `(last: ${outcome.reason}) — the API or your network looks down.`,
+          `${failuresInARow} addresses in a row failed after retries and no answer for ` +
+            `${OUTAGE_AFTER_MS / 60_000} minutes (last: ${outcome.reason}) — the API or your network looks down.`,
         );
       }
     }
