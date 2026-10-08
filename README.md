@@ -36,6 +36,7 @@ The scripts are numbered and build on each other. Run them in order, or use `ful
 | 06 | `export_list_to_csv` | Fetch all prospects from the list and save to `output/prospects.csv` | None |
 | 08 | `verify_email` | Check whether any email address is deliverable, without saving anything (standalone, not part of the pipeline) | 0.1 per email |
 | 09 | `verify_prospect_emails` | Re-verify the work email stored on each saved prospect and update its status in LeadIQ (not part of the pipeline) | 0.1 per prospect |
+| 10 | `verify_emails_csv` | Verify every address in a CSV file — parallel, resumable, built for hundreds of thousands of rows (standalone, not part of the pipeline) | 0.1 per unique email |
 
 ### Full pipeline
 
@@ -57,7 +58,7 @@ All samples authenticate with a **Secret Base64 API key**. Find yours in LeadIQ 
 ## API overview
 
 - **GraphQL API** — `https://api.leadiq.com/graphql` — used by samples 01–03
-- **Prospector REST API** — `https://prospector.leadiq.com` — used by samples 04–06, 08 and 09
+- **Prospector REST API** — `https://prospector.leadiq.com` — used by samples 04–06 and 08–10
 
 ---
 

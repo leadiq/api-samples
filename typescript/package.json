@@ -16,6 +16,7 @@
     "07": "tsx graphql/07_find_job_changes.ts",
     "08": "tsx rest/08_verify_email.ts",
     "09": "tsx rest/09_verify_prospect_emails.ts",
+    "10": "tsx rest/10_verify_emails_csv.ts",
     "start": "tsx full_pipeline.ts",
     "typecheck": "tsc --noEmit"
   },

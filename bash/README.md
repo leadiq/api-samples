@@ -140,10 +140,13 @@ The REST API endpoint is `https://prospector.leadiq.com`. It manages Prospector 
 | `rest/06_export_list_to_csv.sh` | Fetches all prospects from the list and saves them to `output/prospects.csv` — ready to open in Excel or Google Sheets | None |
 | `rest/08_verify_email.sh` | Checks whether one or more email addresses are deliverable, without saving anything — saves the verdicts to `output/verified_emails.txt` | 0.1 per email |
 | `rest/09_verify_prospect_emails.sh` | Reads `output/prospects.csv` and re-verifies the work email stored on each prospect — the new status is saved on the prospect in LeadIQ, and the results to `output/verified_prospects.txt` | 0.1 per prospect |
+| `rest/10_verify_emails_csv.sh` | Verifies every address in a CSV file, at any scale (parallel, resumable, survives interruptions) — saves the verdicts to `output/<name>_results.csv`, without saving anything in LeadIQ | 0.1 per unique email |
 
 > `08_verify_email.sh` is standalone — edit `EMAILS_TO_VERIFY` in the script, or pass addresses on the command line: `bash rest/08_verify_email.sh jane@acme.com`.
 >
 > `09_verify_prospect_emails.sh` runs after `06` and verifies up to `MAX_PROSPECTS` (10) prospects; prospects without an email are skipped. You can also pass prospect IDs directly: `bash rest/09_verify_prospect_emails.sh 6627e3f1a2b3c4d5e6f70001`.
+>
+> `10_verify_emails_csv.sh` is standalone — pass it any CSV with an email column: `bash rest/10_verify_emails_csv.sh contacts.csv`. See [Verifying a large CSV](#verifying-a-large-csv) below.
 
 Expected output for `04_create_prospector_list.sh`:
 
@@ -235,9 +238,64 @@ Max credits : 1.0
 [2/10] John Doe ... john.doe@example.com  VerifiedLikely → VerifiedLikely
 ...
 
-Verified : 10
-Skipped  : 0
-Saved to : output/verified_prospects.txt
+Verified       : 6
+VerifiedLikely : 2
+Unverified     : 1
+Invalid        : 1
+Skipped        : 0
+Saved to       : output/verified_prospects.txt
+```
+
+---
+
+## Verifying a large CSV
+
+`rest/10_verify_emails_csv` checks every address in a CSV file and writes the verdicts to a new CSV. It is built for big files — hundreds of thousands of rows:
+
+```bash
+bash rest/10_verify_emails_csv.sh contacts.csv
+```
+
+- **Input** — any CSV with a header row. The email column is found automatically if it is called `email`, `work_email`, `workEmail` or `email_address`; otherwise pass `--column "Your Column"`.
+- **Output** — `output/contacts_results.csv` (`email,status`) and `output/contacts_errors.csv` (`email,error`) for addresses that could not be checked.
+- **Cost** — 0.1 credit per *unique* address. Duplicates (compared case-insensitively) are checked once, and blank or obviously malformed cells are skipped without calling the API. The script prints the maximum cost and asks before starting; pass `--yes` to skip the question in unattended runs.
+- **Speed** — set `--per-minute` to your API key's rate limit (default 60, the standard Prospector API limit; every API response states it in its `ratelimit-policy` header). At 60 per minute, 100,000 addresses take about 28 hours; at 300 per minute, about 5.5 hours. Several requests run at once (`--workers`, default 10) so slow checks don't hold up the queue — you need roughly *per-minute ÷ 60 × seconds per check* workers to reach the cap. The progress line counts `429s`: a steady stream of them means `--per-minute` is higher than your key allows.
+- **Errors** — rate limits (429), server errors (5xx), timeouts and connection drops are retried up to 5 times with a growing pause. After a 429, every request waits until the API's rate-limit window resets (from its `Retry-After` or `ratelimit` header). Addresses that still fail go to the errors file; running the command again retries them — after every other address, so a few addresses whose mail servers never answer can't hold up the rest.
+
+### If the run is interrupted
+
+Every verdict is written to the results file the moment it arrives, so a stopped run never loses an answer it already paid for. To continue, run **the same command again** — addresses already in the results file are skipped, so nothing is checked or charged twice.
+
+| What happened | What the script does |
+|---|---|
+| Ctrl+C, `kill`, or the terminal window closed | Stops starting new requests, waits for the ones in flight so their answers are saved, then exits. Press Ctrl+C a second time to quit immediately. |
+| The process was killed outright (`kill -9`, crash, power cut) | Everything already written is kept. A half-written last line is detected and that address is checked again. |
+| The API or your network went down | Once 10 addresses in a row have failed and the API hasn't answered anything for 5 minutes, the run stops instead of filling the errors file. |
+| Out of credits (402) or invalid key (401) | Stops at once; results so far are kept. |
+| You start a second run on the same file while one is going | The second run refuses to start, so no address is paid for twice. A lock left behind by a killed run is detected and taken over automatically. |
+
+Exit codes, for wrapper scripts and schedulers: `0` finished, `1` needs a fix (key, credits), `3` stopped early — run again to continue.
+
+For long runs, keep the machine awake (on macOS: `caffeinate -i bash rest/10_verify_emails_csv.sh contacts.csv --yes`) or run it on a server inside `tmux`/`screen`.
+
+If you start the bash version in the background from another script (`bash rest/10_verify_emails_csv.sh contacts.csv --yes &`), bash switches Ctrl+C off for it — stop it with `kill PID` instead, which saves its progress the same way.
+
+The bash version needs only `curl`. The CSV may use quoted fields (`"Smith, Jane"`), but a quoted field must not contain a line break — if yours do, use the Python or TypeScript version.
+
+Expected output:
+
+```
+Input          : contacts.csv (312,480 rows, column 'Email')
+Unique emails  : 301,912
+Already done   : 0 (in output/contacts_results.csv)
+Malformed      : 1,204 (skipped, no credit used)
+To check       : 300,708
+Max credits    : 30,070.8
+Est. time      : ~83.5 h at 60 requests/min
+
+Spend up to 30,070.8 credits? [y/N] y
+[598/300,708] 60/min  ETA 83.4 h  Verified=231  VerifiedLikely=148  Unverified=139  Invalid=80  errors=0  429s=0
+...
 ```
 
 ---

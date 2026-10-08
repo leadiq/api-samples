@@ -62,7 +62,8 @@ const DELAY_MS = 500;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type EmailStatus = "Verified" | "VerifiedLikely" | "Unverified" | "Invalid";
+const STATUSES = ["Verified", "VerifiedLikely", "Unverified", "Invalid"] as const;
+type EmailStatus = (typeof STATUSES)[number];
 
 interface Prospect {
   id: string;
@@ -200,7 +201,7 @@ async function main(): Promise<void> {
   console.log(`Max credits: ${(total * 0.1).toFixed(1)}`);
   console.log();
 
-  const verified: { status: EmailStatus; prospect: Prospect }[] = [];
+  const checked: { status: EmailStatus; prospect: Prospect }[] = [];
   let skipped = 0;
 
   for (let i = 0; i < prospects.length; i++) {
@@ -216,20 +217,26 @@ async function main(): Promise<void> {
       // Show the status before and after so it is clear what changed.
       const before = prospect.emailStatus || "—";
       console.log(`${result.prospect.workEmail}  ${before} → ${result.status}`);
-      verified.push({ status: result.status, prospect: result.prospect });
+      checked.push({ status: result.status, prospect: result.prospect });
     }
 
     // Wait a moment before the next call to stay within rate limits.
     if (i < prospects.length - 1) await sleep(DELAY_MS);
   }
 
+  // Count how many prospects landed in each verdict bucket. "Verified" here
+  // is the verdict, not the number of calls made — a prospect that was
+  // checked and came back Invalid is counted under Invalid.
   console.log();
-  console.log(`Verified : ${verified.length}`);
-  console.log(`Skipped  : ${skipped}`);
+  for (const status of STATUSES) {
+    const count = checked.filter((c) => c.status === status).length;
+    console.log(`${status.padEnd(15)}: ${count}`);
+  }
+  console.log(`${"Skipped".padEnd(15)}: ${skipped}`);
 
   fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
-  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(verified, null, 2));
-  console.log(`Saved to : ${OUTPUT_PATH}`);
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(checked, null, 2));
+  console.log(`${"Saved to".padEnd(15)}: ${OUTPUT_PATH}`);
 }
 
 main();

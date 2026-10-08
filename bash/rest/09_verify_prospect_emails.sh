@@ -154,7 +154,12 @@ mkdir -p "$(dirname "$OUTPUT_FILE")"
 printf '%-26s %-40s %s\n' "ID" "Work Email" "Status" > "$OUTPUT_FILE"
 printf '%s\n' "$(printf '%.0s-' {1..82})" >> "$OUTPUT_FILE"
 
-verified=0
+# One counter per verdict. (bash 3.2, the default on macOS, has no
+# associative arrays, so we keep four plain variables.)
+n_verified=0
+n_verified_likely=0
+n_unverified=0
+n_invalid=0
 skipped=0
 i=0
 
@@ -180,14 +185,25 @@ for entry in "${prospects[@]}"; do
     # Show the status before and after so it is clear what changed.
     echo "$email  ${before:-—} → $status"
     printf '%-26s %-40s %s\n' "$prospect_id" "$email" "$status" >> "$OUTPUT_FILE"
-    verified=$((verified + 1))
+    case "$status" in
+      Verified)       n_verified=$((n_verified + 1)) ;;
+      VerifiedLikely) n_verified_likely=$((n_verified_likely + 1)) ;;
+      Unverified)     n_unverified=$((n_unverified + 1)) ;;
+      Invalid)        n_invalid=$((n_invalid + 1)) ;;
+    esac
   fi
 
   # Wait a moment before the next call to stay within rate limits.
   [[ $i -lt $total ]] && sleep "$DELAY_BETWEEN_CALLS"
 done
 
+# Count how many prospects landed in each verdict bucket.  "Verified" here
+# is the verdict, not the number of calls made — a prospect that was checked
+# and came back Invalid is counted under Invalid.
 echo ""
-echo "Verified : $verified"
-echo "Skipped  : $skipped"
-echo "Saved to : $OUTPUT_FILE"
+echo "Verified       : $n_verified"
+echo "VerifiedLikely : $n_verified_likely"
+echo "Unverified     : $n_unverified"
+echo "Invalid        : $n_invalid"
+echo "Skipped        : $skipped"
+echo "Saved to       : $OUTPUT_FILE"
