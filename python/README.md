@@ -223,13 +223,13 @@ The REST API endpoint is `https://prospector.leadiq.com`. It manages Prospector 
 | `rest/06_export_list_to_csv.py` | Fetches all prospects from the list and saves them to `output/prospects.csv` — ready to open in Excel or Google Sheets | None |
 | `rest/08_verify_email.py` | Checks whether one or more email addresses are deliverable, without saving anything — saves the verdicts to `output/verified_emails.json` | 0.1 per email |
 | `rest/09_verify_prospect_emails.py` | Reads `output/added_prospects.json` and re-verifies the work email stored on each prospect — the new status is saved on the prospect in LeadIQ, and the results to `output/verified_prospects.json` | 0.1 per prospect |
-| `rest/10_verify_emails_csv.py` | Verifies every address in a CSV file, at any scale (parallel, resumable, survives interruptions) — saves the verdicts to `output/<name>_results.csv`, without saving anything in LeadIQ | 0.1 per unique email |
+| `rest/10_verify_emails_csv.py` | Verifies every address in a CSV file, at any scale (parallel, resumable, survives interruptions) — saves the verdicts to `output/<name>_results.csv`, and your rows with the verdict added to `output/<name>_merged.csv`, without saving anything in LeadIQ | 0.1 per unique email |
 
 > `08_verify_email.py` is standalone — edit `EMAILS_TO_VERIFY` in the script, or pass addresses on the command line: `python rest/08_verify_email.py jane@acme.com`.
 >
 > `09_verify_prospect_emails.py` runs after `05` and verifies up to `MAX_PROSPECTS` (10) prospects; prospects without an email are skipped. You can also pass prospect IDs directly: `python rest/09_verify_prospect_emails.py 6627e3f1a2b3c4d5e6f70001`.
 >
-> `10_verify_emails_csv.py` is standalone — pass it any CSV with an email column: `python rest/10_verify_emails_csv.py contacts.csv`. See [Verifying a large CSV](#verifying-a-large-csv) below.
+> `10_verify_emails_csv.py` is standalone — pass it any CSV with an email column (every other column, like a person id, is optional): `python rest/10_verify_emails_csv.py contacts.csv`. See [Verifying a large CSV](#verifying-a-large-csv) below.
 
 Expected output for `04_create_prospector_list.py`:
 
@@ -346,10 +346,10 @@ Saved to       : output/verified_prospects.json
 python rest/10_verify_emails_csv.py contacts.csv
 ```
 
-- **Input** — any CSV with a header row. The email column is found automatically if it is called `email`, `work_email`, `workEmail` or `email_address`; otherwise pass `--column "Your Column"`.
-- **Output** — `output/contacts_results.csv` (`email,status`) and `output/contacts_errors.csv` (`email,error`) for addresses that could not be checked.
+- **Input** — any CSV with a header row. The email column is found automatically if it is called `email`, `work_email`, `workEmail` or `email_address`; otherwise pass `--column "Your Column"`. It is the only column you need: any others (person id, name, company, your own ids) are optional — they are not sent to the API, and are copied unchanged into the merged file.
+- **Output** — `output/contacts_results.csv` (`email,status`), `output/contacts_errors.csv` (`email,error`) for addresses that could not be checked, and `output/contacts_merged.csv`: every row of your file with all its columns, plus `verification_status` and `verification_error`, so you can match each verdict back to your records. Rows that share an address get the same verdict. The merged file is rewritten at the end of every run; rows not checked yet (the run stopped early) have both columns empty until you run the command again.
 - **Cost** — 0.1 credit per *unique* address. Duplicates (compared case-insensitively) are checked once, and blank or obviously malformed cells are skipped without calling the API. The script prints the maximum cost and asks before starting; pass `--yes` to skip the question in unattended runs.
-- **Speed** — set `--per-minute` to your API key's rate limit (default 60, the standard Prospector API limit; every API response states it in its `ratelimit-policy` header). At 60 per minute, 100,000 addresses take about 28 hours; at 300 per minute, about 5.5 hours. Several requests run at once (`--workers`, default 10) so slow checks don't hold up the queue — you need roughly *per-minute ÷ 60 × seconds per check* workers to reach the cap. The progress line counts `429s`: a steady stream of them means `--per-minute` is higher than your key allows.
+- **Speed** — `--per-minute` defaults to 900. The verify-email limit is 450 requests per minute per API key on *each* API server, and the API runs on 2 servers that share the traffic, so a key gets 900 a minute in total (the `ratelimit-policy` header in each response shows one server's 450, not the total). At 900 per minute, 100,000 addresses take about 2 hours. Several requests run at once (`--workers`, default 150) so slow checks don't hold up the queue — you need roughly *per-minute ÷ 60 × seconds per check* workers to reach the cap. The progress line counts `429s`: a steady stream of them means `--per-minute` is higher than your key allows.
 - **Errors** — rate limits (429), server errors (5xx), timeouts and connection drops are retried up to 5 times with a growing pause. After a 429, every request waits until the API's rate-limit window resets (from its `Retry-After` or `ratelimit` header). Addresses that still fail go to the errors file; running the command again retries them — after every other address, so a few addresses whose mail servers never answer can't hold up the rest.
 
 ### If the run is interrupted
@@ -377,10 +377,10 @@ Already done   : 0 (in output/contacts_results.csv)
 Malformed      : 1,204 (skipped, no credit used)
 To check       : 300,708
 Max credits    : 30,070.8
-Est. time      : ~83.5 h at 60 requests/min
+Est. time      : ~5.6 h at 900 requests/min
 
 Spend up to 30,070.8 credits? [y/N] y
-[598/300,708] 60/min  ETA 83.4 h  Verified=231  VerifiedLikely=148  Unverified=139  Invalid=80  errors=0  429s=0
+[9,000/300,708] 900/min  ETA 5.4 h  Verified=3,477  VerifiedLikely=2,228  Unverified=2,092  Invalid=1,203  errors=0  429s=0
 ...
 ```
 

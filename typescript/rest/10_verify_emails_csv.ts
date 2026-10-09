@@ -5,6 +5,11 @@
  * LeadIQ Prospector API, and writes the verdicts to a results CSV. Like
  * 08_verify_email.ts it is read-only: nothing is created or changed in LeadIQ.
  *
+ * The only column the input needs is the email address. Any other columns —
+ * person id, name, company, your own ids — are optional: they are not sent to
+ * the API, and they are copied unchanged into the merged file (see below) so
+ * you can match every verdict back to your own records.
+ *
  * It is built for large files (hundreds of thousands of rows):
  *
  *   • Parallel   — several requests run at once, under a shared rate cap.
@@ -23,9 +28,12 @@
  *   Unverified      — the address could not be confirmed either way
  *   Invalid         — the address will bounce; do not send to it
  *
- * Two files are written to the output/ folder, named after the input file:
+ * Three files are written to the output/ folder, named after the input file:
  *   <name>_results.csv — email,status   (one row per verified address)
  *   <name>_errors.csv  — email,error    (addresses that could not be checked)
+ *   <name>_merged.csv  — every input row with all its columns, plus
+ *                        verification_status and verification_error
+ *                        (rewritten at the end of every run)
  *
  * Run the script again to retry the addresses in the errors file — addresses
  * already in the results file are never checked (or charged) twice.
@@ -39,8 +47,8 @@
  * Options:
  *   --column NAME   the column holding the addresses (default: auto-detect
  *                   "email", "work_email", "workEmail" or "email_address")
- *   --workers N     how many requests to run at once (default: 10)
- *   --per-minute N  the most requests to start per minute (default: 60)
+ *   --workers N     how many requests to run at once (default: 150)
+ *   --per-minute N  the most requests to start per minute (default: 900)
  *   --yes           skip the cost confirmation (for unattended runs)
  *
  * Exit codes (useful when a scheduler or wrapper script runs this):
@@ -69,20 +77,22 @@ const OUTPUT_DIR = path.join(__dirname, "..", "output");
 // Column names we look for when --column is not given (compared case-insensitively).
 const EMAIL_COLUMNS = ["email", "work_email", "workemail", "email_address"];
 
-// The most requests we start per minute, across all workers combined — set it
-// to your API key's rate limit. The Prospector API reports its limit in every
-// response (the "ratelimit-policy" header); the standard limit is 60 requests
-// per minute, so 100,000 addresses take about 28 hours. If the API answers
-// 429 (Too Many Requests) anyway, every worker pauses, so a cap that is too
-// high costs time, not credits.
-const DEFAULT_PER_MINUTE = 60;
+// The most requests we start per minute, across all workers combined. The
+// verify-email limit is 450 requests per minute per API key on EACH API
+// server, and the API runs on 2 servers that share the traffic, so a key gets
+// 2 × 450 = 900 a minute in total — 100,000 addresses take about 2 hours.
+// (The "ratelimit-policy" header in each response shows one server's 450, not
+// the total.) If the API answers 429 (Too Many Requests) anyway, every worker
+// pauses, so a cap that is too high costs time, not credits — if the progress
+// line shows a steady stream of 429s, lower it with --per-minute.
+const DEFAULT_PER_MINUTE = 900;
 
 // How many requests can be in flight at once. Some checks take several
 // seconds (the verifier talks to the recipient's mail server), so to reach the
 // per-minute cap you need roughly:  workers ≥ (per-minute ÷ 60) × seconds per
-// check. 60/min with checks of up to 10 s needs 10. Raising this never
+// check. 900/min with checks of up to 10 s needs 150. Raising this never
 // exceeds the per-minute cap.
-const DEFAULT_WORKERS = 10;
+const DEFAULT_WORKERS = 150;
 
 // How long to wait for one answer. Live mail-server checks can be slow.
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -378,6 +388,40 @@ function readDone(resultsPath: string): Set<string> {
   );
 }
 
+// Every row of the input, with all its columns, plus the verdict for its
+// address. Rows that share an address all get the same verdict (it was checked
+// once). Rows not checked yet — the run stopped early — get neither; run the
+// script again to fill them in.
+function writeMerged(input: string, column: string, resultsPath: string, errorsPath: string, mergedPath: string): void {
+  const statuses = new Map<string, string>();
+  if (fs.existsSync(resultsPath)) {
+    const [, ...rows] = parseCsv(fs.readFileSync(resultsPath, "utf-8"));
+    for (const [email, status] of rows) {
+      if (email && STATUSES.includes(status as EmailStatus)) statuses.set(email.trim().toLowerCase(), status);
+    }
+  }
+  const problems = new Map<string, string>();
+  if (fs.existsSync(errorsPath)) {
+    const [, ...rows] = parseCsv(fs.readFileSync(errorsPath, "utf-8"));
+    for (const [email = "", error = ""] of rows) problems.set(email.trim().toLowerCase(), error);
+  }
+
+  const [header = [], ...rows] = parseCsv(fs.readFileSync(input, "utf-8").replace(/^\uFEFF/, ""));
+  const index = header.map((h) => h.trim()).indexOf(column);
+  const lines = [[...header, "verification_status", "verification_error"]];
+  for (const row of rows) {
+    const key = (row[index] ?? "").trim().toLowerCase();
+    const status = statuses.get(key) ?? "";
+    lines.push([...row, status, status ? "" : (problems.get(key) ?? "")]);
+  }
+
+  // Written to a temporary file first and then renamed, so the merged file is
+  // never left half-written if the run is killed meanwhile.
+  const tempPath = `${mergedPath}.tmp`;
+  fs.writeFileSync(tempPath, lines.map((line) => line.map(csvField).join(",")).join("\n") + "\n");
+  fs.renameSync(tempPath, mergedPath);
+}
+
 // Quote a CSV field only when it needs it.
 function csvField(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
@@ -496,6 +540,7 @@ async function main(): Promise<void> {
   const name = path.parse(input).name;
   const resultsPath = path.join(OUTPUT_DIR, `${name}_results.csv`);
   const errorsPath = path.join(OUTPUT_DIR, `${name}_errors.csv`);
+  const mergedPath = path.join(OUTPUT_DIR, `${name}_merged.csv`);
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   takeLock(path.join(OUTPUT_DIR, `${name}.lock`), input);
@@ -545,7 +590,9 @@ async function main(): Promise<void> {
 
   if (todo.length === 0) {
     errors.close();
+    writeMerged(input, column, resultsPath, errorsPath, mergedPath);
     console.log("Nothing left to check.");
+    console.log(`${"Merged file".padEnd(15)}: ${mergedPath}`);
     return;
   }
 
@@ -618,6 +665,7 @@ async function main(): Promise<void> {
   function summaryAndExit(): never {
     results.close();
     errors.close();
+    writeMerged(input, column, resultsPath, errorsPath, mergedPath);
 
     console.log();
     progress();
@@ -627,6 +675,7 @@ async function main(): Promise<void> {
     console.log(`${"Rate limited".padEnd(15)}: ${n(limiter.throttled)} (429 responses, each one retried)`);
     console.log(`${"Results".padEnd(15)}: ${resultsPath}`);
     console.log(`${"Errors file".padEnd(15)}: ${errorsPath}`);
+    console.log(`${"Merged file".padEnd(15)}: ${mergedPath}`);
 
     if (stoppedBy?.kind === "fatal") {
       console.log();
