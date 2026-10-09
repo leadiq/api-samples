@@ -5,6 +5,11 @@
 # LeadIQ Prospector API, and writes the verdicts to a results CSV.  Like
 # 08_verify_email.sh it is read-only: nothing is created or changed in LeadIQ.
 #
+# The only column the input needs is the email address.  Any other columns —
+# person id, name, company, your own ids — are optional: they are not sent to
+# the API, and they are copied unchanged into the merged file (see below) so
+# you can match every verdict back to your own records.
+#
 # It is built for large files (hundreds of thousands of rows):
 #
 #   • Parallel   — several requests run at once, under a shared rate cap.
@@ -23,9 +28,12 @@
 #   Unverified      — the address could not be confirmed either way
 #   Invalid         — the address will bounce; do not send to it
 #
-# Two files are written to the output/ folder, named after the input file:
+# Three files are written to the output/ folder, named after the input file:
 #   <name>_results.csv — email,status   (one row per verified address)
 #   <name>_errors.csv  — email,error    (addresses that could not be checked)
+#   <name>_merged.csv  — every input row with all its columns, plus
+#                        verification_status and verification_error
+#                        (rewritten at the end of every run)
 #
 # Run the script again to retry the addresses in the errors file — addresses
 # already in the results file are never checked (or charged) twice.
@@ -43,8 +51,8 @@
 # Options:
 #   --column NAME   the column holding the addresses (default: auto-detect
 #                   "email", "work_email", "workEmail" or "email_address")
-#   --workers N     how many requests to run at once (default: 10)
-#   --per-minute N  the most requests to start per minute (default: 60)
+#   --workers N     how many requests to run at once (default: 150)
+#   --per-minute N  the most requests to start per minute (default: 900)
 #   --yes           skip the cost confirmation (for unattended runs)
 #
 # Exit codes (useful when a scheduler or wrapper script runs this):
@@ -63,19 +71,21 @@ OUTPUT_DIR="$SCRIPT_DIR/../output"
 # Column names we look for when --column is not given (compared case-insensitively).
 EMAIL_COLUMNS="email work_email workemail email_address"
 
-# The most requests we start per minute, across all workers combined — set it
-# to your API key's rate limit.  The Prospector API reports its limit in every
-# response (the "ratelimit-policy" header); the standard limit is 60 requests
-# per minute, so 100,000 addresses take about 28 hours.  If the API answers
-# 429 (Too Many Requests) anyway, every worker pauses, so a cap that is too
-# high costs time, not credits.
-PER_MINUTE=60
+# The most requests we start per minute, across all workers combined.  The
+# verify-email limit is 450 requests per minute per API key on EACH API
+# server, and the API runs on 2 servers that share the traffic, so a key gets
+# 2 × 450 = 900 a minute in total — 100,000 addresses take about 2 hours.
+# (The "ratelimit-policy" header in each response shows one server's 450, not
+# the total.)  If the API answers 429 (Too Many Requests) anyway, every worker
+# pauses, so a cap that is too high costs time, not credits — if the progress
+# line shows a steady stream of 429s, lower it with --per-minute.
+PER_MINUTE=900
 
 # How many requests can be in flight at once.  Some checks take several
 # seconds (the verifier talks to the recipient's mail server), so to reach the
 # per-minute cap you need roughly:  workers ≥ (per-minute ÷ 60) × seconds per
-# check.  60/min with checks of up to 10 s needs 10.
-WORKERS=10
+# check.  900/min with checks of up to 10 s needs 150.
+WORKERS=150
 
 # How long to wait for one answer (seconds).  Live mail-server checks can be slow.
 REQUEST_TIMEOUT_SECONDS=60
@@ -161,6 +171,7 @@ name=$(basename "$INPUT"); name="${name%.*}"
 mkdir -p "$OUTPUT_DIR"
 RESULTS="$OUTPUT_DIR/${name}_results.csv"
 ERRORS="$OUTPUT_DIR/${name}_errors.csv"
+MERGED="$OUTPUT_DIR/${name}_merged.csv"
 
 # A private scratch folder for this run.  The background workers use small
 # files in it to share state with each other:
@@ -204,12 +215,13 @@ date +%s > "$STATE/last_answer"
 
 # ── Read the CSV ──────────────────────────────────────────────────────────────
 
-# Print the email column of the CSV, one address per line.  Handles quoted
-# fields ("Smith, Jane" and "say ""hi"""), Windows line endings and the
-# byte-order mark Excel adds.  LC_ALL=C makes awk treat the file as plain
-# bytes, which behaves the same on macOS and Linux.
-extract_column() {
-  LC_ALL=C awk -v want="$COLUMN" -v auto="$EMAIL_COLUMNS" '
+# awk helpers shared by extract_column and write_merged.  parse() splits a CSV
+# line into F[1..n] and handles quoted fields ("Smith, Jane" and
+# "say ""hi"""); find_column() picks the email column from the header line
+# (--column, or the first header in EMAIL_COLUMNS), or prints the headers to
+# stderr and exits 2.  Both awk programs also strip Windows line endings and
+# the byte-order mark Excel adds.
+CSV_AWK='
     function parse(line,   n, i, c, field, inq) {
       if (index(line, "\"") == 0) return split(line, F, ",")
       n = 0; field = ""; inq = 0
@@ -229,25 +241,72 @@ extract_column() {
       return n
     }
     function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
-    BEGIN { split(auto, names, " "); for (i in names) wanted[names[i]] = 1 }
+    function find_column(line,   n, i, h, list) {
+      split(auto, names, " "); for (i in names) wanted[names[i]] = 1
+      n = parse(line)
+      for (i = 1; i <= n; i++) {
+        h = trim(F[i])
+        if ((want != "" && h == want) || (want == "" && tolower(h) in wanted)) return i
+      }
+      list = ""
+      for (i = 1; i <= n; i++) list = list (i > 1 ? ", " : "") trim(F[i])
+      print list > "/dev/stderr"
+      exit 2
+    }
+'
+
+# Print the email column of the CSV, one address per line.  LC_ALL=C makes awk
+# treat the file as plain bytes, which behaves the same on macOS and Linux.
+extract_column() {
+  LC_ALL=C awk -v want="$COLUMN" -v auto="$EMAIL_COLUMNS" "$CSV_AWK"'
     { sub(/\r$/, "") }
     NR == 1 {
       if (substr($0, 1, 3) == "\357\273\277") $0 = substr($0, 4)
-      n = parse($0)
-      for (i = 1; i <= n; i++) {
-        h = trim(F[i])
-        if ((want != "" && h == want) || (want == "" && tolower(h) in wanted)) { col = i; break }
-      }
-      if (!col) {
-        list = ""
-        for (i = 1; i <= n; i++) list = list (i > 1 ? ", " : "") trim(F[i])
-        print list > "/dev/stderr"
-        exit 2
-      }
+      col = find_column($0)
       next
     }
     { delete F; parse($0); print trim(F[col]) }
   ' "$INPUT"
+}
+
+# Write the merged file: every input line, unchanged, with the verdict for its
+# address added as two more columns.  Rows that share an address all get the
+# same verdict (it was checked once).  Rows not checked yet — the run stopped
+# early — get neither; run the script again to fill them in.  It is written to
+# a temporary file first and then renamed, so it is never left half-written.
+write_merged() {
+  LC_ALL=C awk -v want="$COLUMN" -v auto="$EMAIL_COLUMNS" -v shape="$EMAIL_SHAPE" "$CSV_AWK"'
+    function csv(s) { if (s ~ /[",]/) { gsub(/"/, "\"\"", s); s = "\"" s "\"" } return s }
+    FILENAME == ARGV[1] {   # the results file: email,status
+      if (FNR > 1 && $0 ~ /,(Verified|VerifiedLikely|Unverified|Invalid)\r?$/) {
+        i = index($0, ","); s = substr($0, i + 1); sub(/\r$/, "", s)
+        status[tolower(substr($0, 1, i - 1))] = s
+      }
+      next
+    }
+    FILENAME == ARGV[2] {   # the errors file: email,error
+      if (FNR > 1 && (i = index($0, ","))) error[tolower(substr($0, 1, i - 1))] = substr($0, i + 1)
+      next
+    }
+    { sub(/\r$/, "") }
+    FNR == 1 {
+      if (substr($0, 1, 3) == "\357\273\277") $0 = substr($0, 4)
+      col = find_column($0); columns = parse($0)
+      print $0 ",verification_status,verification_error"
+      next
+    }
+    {
+      delete F; n = parse($0); line = $0
+      for (; n < columns; n++) line = line ","   # pad short rows so the new columns line up
+      key = tolower(trim(F[col]))
+      # Blank and malformed cells never reached the API (and may hold commas
+      # or quotes the plain errors file cannot be split on), so label them here.
+      if (key == "")            print line ",,blank email"
+      else if (key !~ shape)    print line ",,malformed email"
+      else if (key in status)   print line "," status[key] ","
+      else                      print line ",," csv(error[key])
+    }
+  ' "$RESULTS" "$ERRORS" "$INPUT" > "$MERGED.tmp" && mv "$MERGED.tmp" "$MERGED"
 }
 
 ALL="$STATE/all_emails"
@@ -337,7 +396,9 @@ while IFS= read -r email; do
 done < "$MALFORMED" >> "$ERRORS"
 
 if [[ "$to_check" -eq 0 ]]; then
+  write_merged
   echo "Nothing left to check."
+  echo "Merged file    : $MERGED"
   exit 0
 fi
 
@@ -508,6 +569,7 @@ trap on_signal INT TERM HUP
 
 finish() {
   local finished v vl u i e
+  write_merged
   sync
   echo ""
   progress
@@ -521,6 +583,7 @@ finish() {
   echo "Rate limited   : $(throttled) (429 responses, each one retried)"
   echo "Results        : $RESULTS"
   echo "Errors file    : $ERRORS"
+  echo "Merged file    : $MERGED"
 
   if [[ -e "$STATE/fatal" ]]; then
     echo ""

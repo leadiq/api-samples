@@ -5,6 +5,11 @@ This sample reads email addresses from a CSV file, checks each one with the
 LeadIQ Prospector API, and writes the verdicts to a results CSV.  Like
 08_verify_email.py it is read-only: nothing is created or changed in LeadIQ.
 
+The only column the input needs is the email address.  Any other columns —
+person id, name, company, your own ids — are optional: they are not sent to
+the API, and they are copied unchanged into the merged file (see below) so
+you can match every verdict back to your own records.
+
 It is built for large files (hundreds of thousands of rows):
 
   • Parallel   — several requests run at once, under a shared rate cap.
@@ -23,9 +28,12 @@ The verdict is one of four values:
   Unverified      — the address could not be confirmed either way
   Invalid         — the address will bounce; do not send to it
 
-Two files are written to the output/ folder, named after the input file:
+Three files are written to the output/ folder, named after the input file:
   <name>_results.csv — email, status   (one row per verified address)
   <name>_errors.csv  — email, error    (addresses that could not be checked)
+  <name>_merged.csv  — every input row with all its columns, plus
+                       verification_status and verification_error
+                       (rewritten at the end of every run)
 
 Run the script again to retry the addresses in the errors file — addresses
 already in the results file are never checked (or charged) twice.
@@ -39,8 +47,8 @@ Run it with:
 Options:
     --column NAME   the column holding the addresses (default: auto-detect
                     "email", "work_email", "workEmail" or "email_address")
-    --workers N     how many requests to run at once (default: 10)
-    --per-minute N  the most requests to start per minute (default: 60)
+    --workers N     how many requests to run at once (default: 150)
+    --per-minute N  the most requests to start per minute (default: 900)
     --yes           skip the cost confirmation (for unattended runs)
 
 Exit codes (useful when a scheduler or wrapper script runs this):
@@ -88,20 +96,22 @@ OUTPUT_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "out
 # Column names we look for when --column is not given (compared case-insensitively).
 EMAIL_COLUMNS = ("email", "work_email", "workemail", "email_address")
 
-# The most requests we start per minute, across all workers combined — set it
-# to your API key's rate limit.  The Prospector API reports its limit in every
-# response (the "ratelimit-policy" header); the standard limit is 60 requests
-# per minute, so 100,000 addresses take about 28 hours.  If the API answers
-# 429 (Too Many Requests) anyway, every worker pauses, so a cap that is too
-# high costs time, not credits.
-DEFAULT_PER_MINUTE = 60
+# The most requests we start per minute, across all workers combined.  The
+# verify-email limit is 450 requests per minute per API key on EACH API
+# server, and the API runs on 2 servers that share the traffic, so a key gets
+# 2 × 450 = 900 a minute in total — 100,000 addresses take about 2 hours.
+# (The "ratelimit-policy" header in each response shows one server's 450, not
+# the total.)  If the API answers 429 (Too Many Requests) anyway, every worker
+# pauses, so a cap that is too high costs time, not credits — if the progress
+# line shows a steady stream of 429s, lower it with --per-minute.
+DEFAULT_PER_MINUTE = 900
 
 # How many requests can be in flight at once.  Some checks take several
 # seconds (the verifier talks to the recipient's mail server), so to reach the
 # per-minute cap you need roughly:  workers ≥ (per-minute ÷ 60) × seconds per
-# check.  60/min with checks of up to 10 s needs 10.  Raising this never
+# check.  900/min with checks of up to 10 s needs 150.  Raising this never
 # exceeds the per-minute cap.
-DEFAULT_WORKERS = 10
+DEFAULT_WORKERS = 150
 
 # How long to wait for one answer.  Live mail-server checks can be slow.
 REQUEST_TIMEOUT_SECONDS = 60
@@ -322,6 +332,43 @@ def read_failed(errors_path):
         return {row["email"].strip().lower() for row in csv.DictReader(f) if row.get("email")}
 
 
+def write_merged(input_path, column, results_path, errors_path, merged_path):
+    # Every row of the input, with all its columns, plus the verdict for its
+    # address.  Rows that share an address all get the same verdict (it was
+    # checked once).  Rows not checked yet — the run stopped early — get
+    # neither; run the script again to fill them in.
+    statuses = {}
+    if os.path.exists(results_path):
+        with open(results_path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                if row.get("email") and row.get("status") in STATUSES:
+                    statuses[row["email"].strip().lower()] = row["status"]
+    problems = {}
+    if os.path.exists(errors_path):
+        with open(errors_path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                problems[(row.get("email") or "").strip().lower()] = row.get("error") or ""
+
+    # Written to a temporary file first and then renamed, so the merged file
+    # is never left half-written if the run is killed meanwhile.
+    temp_path = merged_path + ".tmp"
+    with open(input_path, newline="", encoding="utf-8-sig") as src, \
+            open(temp_path, "w", newline="", encoding="utf-8") as dst:
+        reader = csv.reader(src)
+        writer = csv.writer(dst, lineterminator="\n")
+        headers = next(reader, [])
+        index = headers.index(column)
+        writer.writerow(headers + ["verification_status", "verification_error"])
+        for row in reader:
+            if not row:   # a blank line — DictReader skipped it when reading the emails too
+                continue
+            key = (row[index] if index < len(row) else "").strip().lower()
+            status = statuses.get(key, "")
+            error = "" if status else problems.get(key, "")
+            writer.writerow(row + [status, error])
+    os.replace(temp_path, merged_path)
+
+
 class CsvAppender:
     # A CSV file several threads can append to.  Every row is handed to the
     # operating system as soon as it is written, so it survives this program
@@ -439,6 +486,7 @@ def main():
     name = os.path.splitext(os.path.basename(args.input_csv))[0]
     results_path = os.path.join(OUTPUT_DIR, f"{name}_results.csv")
     errors_path  = os.path.join(OUTPUT_DIR, f"{name}_errors.csv")
+    merged_path  = os.path.join(OUTPUT_DIR, f"{name}_merged.csv")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     take_lock(os.path.join(OUTPUT_DIR, f"{name}.lock"), args.input_csv)
@@ -484,7 +532,9 @@ def main():
 
     if not todo:
         errors.close()
+        write_merged(args.input_csv, column, results_path, errors_path, merged_path)
         print("Nothing left to check.")
+        print(f"{'Merged file':<15}: {merged_path}")
         return
 
     results = CsvAppender(results_path, ["email", "status"], "a")
@@ -600,6 +650,7 @@ def main():
 
     results.close()
     errors.close()
+    write_merged(args.input_csv, column, results_path, errors_path, merged_path)
 
     print()
     progress()
@@ -610,6 +661,7 @@ def main():
     print(f"{'Rate limited':<15}: {limiter.throttled:,} (429 responses, each one retried)")
     print(f"{'Results':<15}: {results_path}")
     print(f"{'Errors file':<15}: {errors_path}")
+    print(f"{'Merged file':<15}: {merged_path}")
 
     if stopped_by:
         kind, message = stopped_by
