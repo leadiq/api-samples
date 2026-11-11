@@ -22,10 +22,10 @@
  *   • Thrifty    — duplicate addresses are checked once, and addresses that are
  *                  obviously malformed are skipped without calling the API.
  *
- * The verdict is one of four values:
+ * The verdict is one of three values:
  *   Verified        — the mailbox exists and accepts mail
- *   VerifiedLikely  — the address is very likely deliverable
  *   Unverified      — the address could not be confirmed either way
+ *                     (for example a catch-all domain, which accepts every address)
  *   Invalid         — the address will bounce; do not send to it
  *
  * Three files are written to the output/ folder, named after the input file:
@@ -116,7 +116,7 @@ const OUTAGE_AFTER_MS = 300_000;
 const PROGRESS_EVERY_MS = 10_000;
 const SYNC_TO_DISK_EVERY_MS = 5000;
 
-const STATUSES = ["Verified", "VerifiedLikely", "Unverified", "Invalid"] as const;
+const STATUSES = ["Verified", "Unverified", "Invalid"] as const;
 type EmailStatus = (typeof STATUSES)[number];
 
 // A deliberately loose shape check: something@something.something, with no
@@ -365,7 +365,7 @@ function readEmails(file: string, column: string | undefined) {
 }
 
 // Addresses already in the results file from an earlier run. A row only
-// counts if its status is one of the four verdicts — if a previous run was
+// counts if its status is one of the three verdicts — if a previous run was
 // killed halfway through writing a line, that cut-off line is ignored and the
 // address is simply checked again.
 // Addresses the previous run could not check (its errors file). They are
@@ -607,7 +607,6 @@ async function main(): Promise<void> {
   const limiter = new RateLimiter(perMinute);
   const counts: Record<EmailStatus | "errors", number> = {
     Verified: 0,
-    VerifiedLikely: 0,
     Unverified: 0,
     Invalid: 0,
     errors: 0,

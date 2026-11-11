@@ -6,10 +6,10 @@ and prints a deliverability verdict for each one.  Nothing is created or
 changed in LeadIQ — it is a read-only "pre-flight" check you can run before
 adding someone as a prospect.
 
-The verdict is one of four values:
+The verdict is one of three values:
   Verified        — the mailbox exists and accepts mail
-  VerifiedLikely  — the address is very likely deliverable
   Unverified      — the address could not be confirmed either way
+                    (for example a catch-all domain, which accepts every address)
   Invalid         — the address will bounce; do not send to it
 
 This sample is standalone — it does not need the output of any earlier script.
@@ -78,7 +78,7 @@ def verify_email(email):
     # anything on the server.
     #
     # The API returns a single field:
-    #   status — Verified, VerifiedLikely, Unverified, or Invalid
+    #   status — Verified, Unverified, or Invalid
     try:
         response = requests.get(
             f"{PROSPECTOR_URL}/v1/verify-email",
@@ -146,7 +146,7 @@ def main():
 
     # Count how many addresses landed in each verdict bucket.
     print()
-    for status in ("Verified", "VerifiedLikely", "Unverified", "Invalid"):
+    for status in ("Verified", "Unverified", "Invalid"):
         count = sum(1 for r in results if r["status"] == status)
         print(f"{status:<15}: {count}")
     print(f"{'Skipped':<15}: {sum(1 for r in results if r['status'] is None)}")

@@ -22,10 +22,10 @@ It is built for large files (hundreds of thousands of rows):
   • Thrifty    — duplicate addresses are checked once, and addresses that are
                  obviously malformed are skipped without calling the API.
 
-The verdict is one of four values:
+The verdict is one of three values:
   Verified        — the mailbox exists and accepts mail
-  VerifiedLikely  — the address is very likely deliverable
   Unverified      — the address could not be confirmed either way
+                    (for example a catch-all domain, which accepts every address)
   Invalid         — the address will bounce; do not send to it
 
 Three files are written to the output/ folder, named after the input file:
@@ -135,7 +135,7 @@ OUTAGE_AFTER_SECONDS = 300
 PROGRESS_EVERY_SECONDS = 10
 SYNC_TO_DISK_EVERY_SECONDS = 5
 
-STATUSES = ("Verified", "VerifiedLikely", "Unverified", "Invalid")
+STATUSES = ("Verified", "Unverified", "Invalid")
 
 # A deliberately loose shape check: something@something.something, with no
 # spaces, commas or quotes.  The API does the real validation — this only
@@ -308,7 +308,7 @@ def read_emails(path, column):
 
 def read_done(results_path):
     # Addresses already in the results file from an earlier run.  A row only
-    # counts if its status is one of the four verdicts — if a previous run was
+    # counts if its status is one of the three verdicts — if a previous run was
     # killed halfway through writing a line, that cut-off line is ignored and
     # the address is simply checked again.
     if not os.path.exists(results_path):

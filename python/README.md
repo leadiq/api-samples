@@ -311,7 +311,6 @@ Max credits: 0.2
 [2/2] old.address@example.com ... Invalid
 
 Verified       : 1
-VerifiedLikely : 0
 Unverified     : 0
 Invalid        : 1
 Skipped        : 0
@@ -325,12 +324,11 @@ Prospects  : 10 (MAX_PROSPECTS=10)
 Max credits: 1.0
 
 [1/10] Jane Smith ... jane.smith@acme.com  Unverified → Verified
-[2/10] John Doe ... john.doe@example.com  VerifiedLikely → VerifiedLikely
+[2/10] John Doe ... john.doe@example.com  Verified → Unverified
 ...
 
 Verified       : 6
-VerifiedLikely : 2
-Unverified     : 1
+Unverified     : 3
 Invalid        : 1
 Skipped        : 0
 Saved to       : output/verified_prospects.json
@@ -380,7 +378,7 @@ Max credits    : 30,070.8
 Est. time      : ~5.6 h at 900 requests/min
 
 Spend up to 30,070.8 credits? [y/N] y
-[9,000/300,708] 900/min  ETA 5.4 h  Verified=3,477  VerifiedLikely=2,228  Unverified=2,092  Invalid=1,203  errors=0  429s=0
+[9,000/300,708] 900/min  ETA 5.4 h  Verified=2,250  Unverified=4,090  Invalid=2,660  errors=0  429s=0
 ...
 ```
 

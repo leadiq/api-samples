@@ -10,10 +10,10 @@
  * address that is already there, it does not look for a new one. Prospects
  * without an email are skipped.
  *
- * The verdict is one of four values:
+ * The verdict is one of three values:
  *   Verified        — the mailbox exists and accepts mail
- *   VerifiedLikely  — the address is very likely deliverable
  *   Unverified      — the address could not be confirmed either way
+ *                     (for example a catch-all domain, which accepts every address)
  *   Invalid         — the address will bounce; do not send to it
  *
  * IMPORTANT: Each prospect verified costs 0.1 credit.
@@ -62,7 +62,7 @@ const DELAY_MS = 500;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-const STATUSES = ["Verified", "VerifiedLikely", "Unverified", "Invalid"] as const;
+const STATUSES = ["Verified", "Unverified", "Invalid"] as const;
 type EmailStatus = (typeof STATUSES)[number];
 
 interface Prospect {
@@ -105,7 +105,7 @@ async function verifyProspectEmail(
   // API verifies whatever email is already stored on the prospect.
   //
   // The API returns:
-  //   status   — Verified, VerifiedLikely, Unverified, or Invalid
+  //   status   — Verified, Unverified, or Invalid
   //   prospect — the full prospect record, with emailStatus already updated
   //
   // On failure this function returns a short reason string instead.

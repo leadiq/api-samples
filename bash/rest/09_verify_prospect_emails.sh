@@ -10,10 +10,10 @@
 # address that is already there, it does not look for a new one.  Prospects
 # without an email are skipped.
 #
-# The verdict is one of four values:
+# The verdict is one of three values:
 #   Verified        — the mailbox exists and accepts mail
-#   VerifiedLikely  — the address is very likely deliverable
 #   Unverified      — the address could not be confirmed either way
+#                     (for example a catch-all domain, which accepts every address)
 #   Invalid         — the address will bounce; do not send to it
 #
 # IMPORTANT: Each prospect verified costs 0.1 credit.
@@ -155,9 +155,8 @@ printf '%-26s %-40s %s\n' "ID" "Work Email" "Status" > "$OUTPUT_FILE"
 printf '%s\n' "$(printf '%.0s-' {1..82})" >> "$OUTPUT_FILE"
 
 # One counter per verdict. (bash 3.2, the default on macOS, has no
-# associative arrays, so we keep four plain variables.)
+# associative arrays, so we keep three plain variables.)
 n_verified=0
-n_verified_likely=0
 n_unverified=0
 n_invalid=0
 skipped=0
@@ -187,7 +186,6 @@ for entry in "${prospects[@]}"; do
     printf '%-26s %-40s %s\n' "$prospect_id" "$email" "$status" >> "$OUTPUT_FILE"
     case "$status" in
       Verified)       n_verified=$((n_verified + 1)) ;;
-      VerifiedLikely) n_verified_likely=$((n_verified_likely + 1)) ;;
       Unverified)     n_unverified=$((n_unverified + 1)) ;;
       Invalid)        n_invalid=$((n_invalid + 1)) ;;
     esac
@@ -202,7 +200,6 @@ done
 # and came back Invalid is counted under Invalid.
 echo ""
 echo "Verified       : $n_verified"
-echo "VerifiedLikely : $n_verified_likely"
 echo "Unverified     : $n_unverified"
 echo "Invalid        : $n_invalid"
 echo "Skipped        : $skipped"
