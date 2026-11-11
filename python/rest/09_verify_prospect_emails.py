@@ -10,10 +10,10 @@ The prospect's email address itself is NEVER changed — this checks the address
 that is already there, it does not look for a new one.  Prospects without an
 email are skipped.
 
-The verdict is one of four values:
+The verdict is one of three values:
   Verified        — the mailbox exists and accepts mail
-  VerifiedLikely  — the address is very likely deliverable
   Unverified      — the address could not be confirmed either way
+                    (for example a catch-all domain, which accepts every address)
   Invalid         — the address will bounce; do not send to it
 
 IMPORTANT: Each prospect verified costs 0.1 credit.
@@ -84,7 +84,7 @@ def verify_prospect_email(prospect_id):
     # API verifies whatever email is already stored on the prospect.
     #
     # The API returns:
-    #   status   — Verified, VerifiedLikely, Unverified, or Invalid
+    #   status   — Verified, Unverified, or Invalid
     #   prospect — the full prospect record, with emailStatus already updated
     try:
         response = requests.post(
@@ -182,7 +182,7 @@ def main():
     # is the verdict, not the number of calls made — a prospect that was
     # checked and came back Invalid is counted under Invalid.
     print()
-    for status in ("Verified", "VerifiedLikely", "Unverified", "Invalid"):
+    for status in ("Verified", "Unverified", "Invalid"):
         count = sum(1 for c in checked if c["status"] == status)
         print(f"{status:<15}: {count}")
     print(f"{'Skipped':<15}: {len(skipped)}")

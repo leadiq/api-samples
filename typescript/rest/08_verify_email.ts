@@ -6,10 +6,10 @@
  * changed in LeadIQ — it is a read-only "pre-flight" check you can run before
  * adding someone as a prospect.
  *
- * The verdict is one of four values:
+ * The verdict is one of three values:
  *   Verified        — the mailbox exists and accepts mail
- *   VerifiedLikely  — the address is very likely deliverable
  *   Unverified      — the address could not be confirmed either way
+ *                     (for example a catch-all domain, which accepts every address)
  *   Invalid         — the address will bounce; do not send to it
  *
  * This sample is standalone — it does not need the output of any earlier script.
@@ -47,7 +47,7 @@ const DELAY_MS = 500;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-const STATUSES = ["Verified", "VerifiedLikely", "Unverified", "Invalid"] as const;
+const STATUSES = ["Verified", "Unverified", "Invalid"] as const;
 type EmailStatus = (typeof STATUSES)[number];
 
 interface VerifyEmailResponse {
@@ -85,7 +85,7 @@ async function verifyEmail(email: string): Promise<VerifyResult> {
   // anything on the server.
   //
   // The API returns a single field:
-  //   status — Verified, VerifiedLikely, Unverified, or Invalid
+  //   status — Verified, Unverified, or Invalid
   const url = new URL(`${PROSPECTOR_URL}/v1/verify-email`);
   url.searchParams.set("email", email);
 

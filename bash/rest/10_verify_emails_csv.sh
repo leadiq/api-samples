@@ -22,10 +22,10 @@
 #   • Thrifty    — duplicate addresses are checked once, and addresses that are
 #                  obviously malformed are skipped without calling the API.
 #
-# The verdict is one of four values:
+# The verdict is one of three values:
 #   Verified        — the mailbox exists and accepts mail
-#   VerifiedLikely  — the address is very likely deliverable
 #   Unverified      — the address could not be confirmed either way
+#                     (for example a catch-all domain, which accepts every address)
 #   Invalid         — the address will bounce; do not send to it
 #
 # Three files are written to the output/ folder, named after the input file:
@@ -278,7 +278,7 @@ write_merged() {
   LC_ALL=C awk -v want="$COLUMN" -v auto="$EMAIL_COLUMNS" -v shape="$EMAIL_SHAPE" "$CSV_AWK"'
     function csv(s) { if (s ~ /[",]/) { gsub(/"/, "\"\"", s); s = "\"" s "\"" } return s }
     FILENAME == ARGV[1] {   # the results file: email,status
-      if (FNR > 1 && $0 ~ /,(Verified|VerifiedLikely|Unverified|Invalid)\r?$/) {
+      if (FNR > 1 && $0 ~ /,(Verified|Unverified|Invalid)\r?$/) {
         i = index($0, ","); s = substr($0, i + 1); sub(/\r$/, "", s)
         status[tolower(substr($0, 1, i - 1))] = s
       }
@@ -329,7 +329,7 @@ fi
 # Split the addresses into: already done, malformed, and to check.
 #  • Addresses are compared case-insensitively, so "Jane@Acme.com" and
 #    "jane@acme.com" are checked (and charged) once.
-#  • A results row only counts as done if its status is one of the four
+#  • A results row only counts as done if its status is one of the three
 #    verdicts — a half-written line from a killed run is checked again.
 #  • Addresses in the previous run's errors file are checked LAST: an address
 #    that failed before often fails again, slowly, and if a few of them came
@@ -342,7 +342,7 @@ PREVIOUS_ERRORS="$ERRORS"
 [[ -f "$PREVIOUS_ERRORS" ]] || PREVIOUS_ERRORS=/dev/null
 summary=$(LC_ALL=C awk -F, -v shape="$EMAIL_SHAPE" -v todo="$TODO" -v retry="$RETRY" -v bad="$MALFORMED" '
   FILENAME == ARGV[1] {   # the results file
-    if (FNR > 1 && $2 ~ /^(Verified|VerifiedLikely|Unverified|Invalid)$/) done[tolower($1)] = 1
+    if (FNR > 1 && $2 ~ /^(Verified|Unverified|Invalid)$/) done[tolower($1)] = 1
     next
   }
   FILENAME == ARGV[2] {   # the previous errors file (or /dev/null if there is none)
@@ -526,19 +526,19 @@ started=$SECONDS
 counts() {
   tail -n +$((start_lines + 1)) "$RESULTS" | awk -F, -v errs="$(( $(wc -l < "$ERRORS") - start_errors ))" '
     { c[$2]++; n++ }
-    END { printf "%d %d %d %d %d %d", n + errs, c["Verified"], c["VerifiedLikely"], c["Unverified"], c["Invalid"], errs }'
+    END { printf "%d %d %d %d %d", n + errs, c["Verified"], c["Unverified"], c["Invalid"], errs }'
 }
 
 throttled() { wc -l < "$STATE/throttled" | tr -d ' '; }
 
 progress() {
-  local finished v vl u i e elapsed
-  read -r finished v vl u i e <<< "$(counts)"
+  local finished v u i e elapsed
+  read -r finished v u i e <<< "$(counts)"
   elapsed=$((SECONDS - started))
-  awk -v th="$(throttled)" -v f="$finished" -v t="$to_check" -v s="$elapsed" -v v="$v" -v vl="$vl" -v u="$u" -v i="$i" -v e="$e" 'BEGIN {
+  awk -v th="$(throttled)" -v f="$finished" -v t="$to_check" -v s="$elapsed" -v v="$v" -v u="$u" -v i="$i" -v e="$e" 'BEGIN {
     rate = s > 0 ? f / s * 60 : 0
     eta = rate > 0 ? sprintf("%.1f h", (t - f) / rate / 60) : "?"
-    printf "[%d/%d] %.0f/min  ETA %s  Verified=%d  VerifiedLikely=%d  Unverified=%d  Invalid=%d  errors=%d  429s=%d\n", f, t, rate, eta, v, vl, u, i, e, th
+    printf "[%d/%d] %.0f/min  ETA %s  Verified=%d  Unverified=%d  Invalid=%d  errors=%d  429s=%d\n", f, t, rate, eta, v, u, i, e, th
   }'
 }
 
@@ -568,15 +568,14 @@ on_signal() {
 trap on_signal INT TERM HUP
 
 finish() {
-  local finished v vl u i e
+  local finished v u i e
   write_merged
   sync
   echo ""
   progress
-  read -r finished v vl u i e <<< "$(counts)"
+  read -r finished v u i e <<< "$(counts)"
   echo ""
   echo "Verified       : $v"
-  echo "VerifiedLikely : $vl"
   echo "Unverified     : $u"
   echo "Invalid        : $i"
   echo "Errors         : $e"

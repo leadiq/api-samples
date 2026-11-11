@@ -6,10 +6,10 @@
 # changed in LeadIQ — it is a read-only "pre-flight" check you can run before
 # adding someone as a prospect.
 #
-# The verdict is one of four values:
+# The verdict is one of three values:
 #   Verified        — the mailbox exists and accepts mail
-#   VerifiedLikely  — the address is very likely deliverable
 #   Unverified      — the address could not be confirmed either way
+#                     (for example a catch-all domain, which accepts every address)
 #   Invalid         — the address will bounce; do not send to it
 #
 # This sample is standalone — it does not need the output of any earlier script.
